@@ -1,45 +1,42 @@
-import datetime
+import pytest
 import calendar_utils
-from calendar_utils import list_upcoming_events, create_event
 
-class DummyService:
-    def events(self):
-        return self
-
+class FakeEventsList:
+    def __init__(self, items):
+        self._items = items
     def list(self, calendarId, timeMin, maxResults, singleEvents, orderBy):
         return self
-
-    def insert(self, calendarId, body):
-        class Req:
-            def execute(self_inner):
-                return {'id': 'abc123', **body}
-        return Req()
-
     def execute(self):
-        return {
-            'items': [
-                {
-                    'start': {'dateTime': '2025-01-01T10:00:00Z'},
-                    'summary': 'Test Event'
-                }
-            ]
-        }
+        return {"items": self._items}
 
-def test_list_upcoming_events(monkeypatch):
-    # freeze now so list_upcoming_events uses a known datetime
-    monkeypatch.setattr(calendar_utils.datetime, 'datetime', datetime.datetime)
-    dummy = DummyService()
-    events = list_upcoming_events(dummy, max_results=1)
-    assert isinstance(events, list)
-    assert events[0]['summary'] == 'Test Event'
+class FakeEventsInsert:
+    def __init__(self, body):
+        self._body = body
+    def insert(self, calendarId, body):
+        self._body = body
+        return self
+    def execute(self):
+        # mimic API returning the created event
+        return {"created": True, **self._body}
 
-def test_create_event_response():
-    dummy = DummyService()
-    body = {
-        'summary': 'New Event',
-        'start': {'dateTime': '2025-02-02T12:00:00Z'},
-        'end': {'dateTime': '2025-02-02T13:00:00Z'}
-    }
-    response = create_event(dummy, body)
-    assert response['id'] == 'abc123'
-    assert response['summary'] == 'New Event'
+def test_list_upcoming_events_returns_items(monkeypatch):
+    fake_items = [
+        {"id": "1", "summary": "Test Event", "start": {"dateTime": "2025-01-01T10:00:00Z"}}
+    ]
+    fake_service = type("S", (), {"events": lambda self: FakeEventsList(fake_items)})()
+    result = calendar_utils.list_upcoming_events(fake_service, max_results=1)
+    assert result == fake_items
+
+def test_list_upcoming_events_defaults_empty(monkeypatch):
+    fake_service = type("S", (), {"events": lambda self: FakeEventsList([])})()
+    result = calendar_utils.list_upcoming_events(fake_service)
+    assert result == []
+
+def test_create_event_calls_insert_and_returns_body(monkeypatch):
+    event_body = {"summary": "New Meeting", "start": {"dateTime": "2025-02-02T14:00:00Z"}, "end": {"dateTime": "2025-02-02T15:00:00Z"}}
+    fake_service = type("S", (), {"events": lambda self: FakeEventsInsert(event_body)})()
+    created = calendar_utils.create_event(fake_service, event_body)
+    assert created.get("created") is True
+    assert created["summary"] == event_body["summary"]
+    assert created["start"] == event_body["start"]
+    assert created["end"] == event_body["end"]
