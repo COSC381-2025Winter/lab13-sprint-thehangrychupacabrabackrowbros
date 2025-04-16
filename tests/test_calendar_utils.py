@@ -1,35 +1,45 @@
-import os
-import pickle
-
-import pytest
-
+import datetime
 import calendar_utils
-from calendar_utils import get_calendar_service
+from calendar_utils import list_upcoming_events, create_event
 
-class DummyCreds:
-    def __init__(self):
-        self.valid = True
-        self.expired = False
-        self.refresh_token = None
+class DummyService:
+    def events(self):
+        return self
 
-@pytest.fixture(autouse=True)
-def mock_oauth_flow_and_build(monkeypatch, tmp_path):
-    # 1) Pretend there is no existing token.pickle
-    monkeypatch.setattr(calendar_utils.os.path, "exists", lambda path: False)
-    # 2) Fake the OAuth flow so run_local_server() returns DummyCreds()
-    class FakeFlow:
-        def run_local_server(self, port=0):
-            return DummyCreds()
-    monkeypatch.setattr(
-        calendar_utils.InstalledAppFlow,
-        "from_client_secrets_file",
-        lambda creds_path, scopes: FakeFlow()
-    )
-    # 3) Stub out build() to return a sentinel
-    monkeypatch.setattr(calendar_utils, "build", lambda service, version, credentials: "FAKE_SERVICE")
-    # 4) Prevent actually writing a pickle
-    monkeypatch.setattr(pickle, "dump", lambda obj, f: None)
+    def list(self, calendarId, timeMin, maxResults, singleEvents, orderBy):
+        return self
 
-def test_get_calendar_service_returns_fake_service():
-    service = get_calendar_service()
-    assert service == "FAKE_SERVICE"
+    def insert(self, calendarId, body):
+        class Req:
+            def execute(self_inner):
+                return {'id': 'abc123', **body}
+        return Req()
+
+    def execute(self):
+        return {
+            'items': [
+                {
+                    'start': {'dateTime': '2025-01-01T10:00:00Z'},
+                    'summary': 'Test Event'
+                }
+            ]
+        }
+
+def test_list_upcoming_events(monkeypatch):
+    # freeze now so list_upcoming_events uses a known datetime
+    monkeypatch.setattr(calendar_utils.datetime, 'datetime', datetime.datetime)
+    dummy = DummyService()
+    events = list_upcoming_events(dummy, max_results=1)
+    assert isinstance(events, list)
+    assert events[0]['summary'] == 'Test Event'
+
+def test_create_event_response():
+    dummy = DummyService()
+    body = {
+        'summary': 'New Event',
+        'start': {'dateTime': '2025-02-02T12:00:00Z'},
+        'end': {'dateTime': '2025-02-02T13:00:00Z'}
+    }
+    response = create_event(dummy, body)
+    assert response['id'] == 'abc123'
+    assert response['summary'] == 'New Event'

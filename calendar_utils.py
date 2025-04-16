@@ -1,5 +1,6 @@
 import os
 import pickle  # for token storage
+import datetime
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
@@ -32,6 +33,34 @@ def get_calendar_service():
     # Build the Calendar API service
     service = build('calendar', 'v3', credentials=creds)
     return service
+
+def list_upcoming_events(service, max_results: int = 10):
+    """
+    Returns the next `max_results` events on the user's primary calendar.
+    """
+    now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC
+    events_result = (
+        service.events()
+               .list(
+                   calendarId='primary',
+                   timeMin=now,
+                   maxResults=max_results,
+                   singleEvents=True,
+                   orderBy='startTime'
+               )
+               .execute()
+    )
+    return events_result.get('items', [])
+
+def create_event(service, event_body: dict):
+    """
+    Creates an event on the user's primary calendar.
+    `event_body` must follow the Google Calendar API spec.
+    """
+    return service.events().insert(
+        calendarId='primary',
+        body=event_body
+    ).execute()
 
 # Quick smoke test when run as a script
 if __name__ == '__main__':
