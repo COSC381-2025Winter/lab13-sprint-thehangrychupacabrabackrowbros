@@ -1,42 +1,71 @@
 import pytest
-import calendar_utils
+from calendar_utils import list_upcoming_events, create_event
 
-class FakeEventsList:
-    def __init__(self, items):
-        self._items = items
-    def list(self, calendarId, timeMin, maxResults, singleEvents, orderBy):
+class FakeService:
+    """
+    Mimics the shape of service.events().list(...).execute()
+    and service.events().insert(...).execute()
+    """
+    def __init__(self, items=None):
+        self._items = items or []
+        self.insert_args = None
+
+    def events(self):
         return self
+
+    def list(self, calendarId, timeMin, maxResults, singleEvents, orderBy):
+        # store the parameters for sanity-checking if you like
+        self.last_list_kwargs = {
+            "calendarId": calendarId,
+            "timeMin": timeMin,
+            "maxResults": maxResults,
+            "singleEvents": singleEvents,
+            "orderBy": orderBy,
+        }
+        return self
+
+    def insert(self, calendarId, body):
+        # record what was passed in, and reuse this object
+        self.insert_args = (calendarId, body)
+        return self
+
     def execute(self):
+        # if insert_args is set, return an “inserted” event dict
+        if self.insert_args:
+            cal_id, body = self.insert_args
+            return {"calendarId": cal_id, **body}
+        # otherwise we’re coming from list()
         return {"items": self._items}
 
-class FakeEventsInsert:
-    def __init__(self, body):
-        self._body = body
-    def insert(self, calendarId, body):
-        self._body = body
-        return self
-    def execute(self):
-        # mimic API returning the created event
-        return {"created": True, **self._body}
 
-def test_list_upcoming_events_returns_items(monkeypatch):
-    fake_items = [
-        {"id": "1", "summary": "Test Event", "start": {"dateTime": "2025-01-01T10:00:00Z"}}
+def test_list_upcoming_events_empty():
+    fake = FakeService(items=[])
+    events = list_upcoming_events(fake, max_results=3)
+    assert events == []
+
+
+def test_list_upcoming_events_non_empty():
+    sample = [
+        {"id": "evt1", "summary": "First"},
+        {"id": "evt2", "summary": "Second"},
     ]
-    fake_service = type("S", (), {"events": lambda self: FakeEventsList(fake_items)})()
-    result = calendar_utils.list_upcoming_events(fake_service, max_results=1)
-    assert result == fake_items
+    fake = FakeService(items=sample)
+    events = list_upcoming_events(fake, max_results=2)
+    assert events == sample
 
-def test_list_upcoming_events_defaults_empty(monkeypatch):
-    fake_service = type("S", (), {"events": lambda self: FakeEventsList([])})()
-    result = calendar_utils.list_upcoming_events(fake_service)
-    assert result == []
 
-def test_create_event_calls_insert_and_returns_body(monkeypatch):
-    event_body = {"summary": "New Meeting", "start": {"dateTime": "2025-02-02T14:00:00Z"}, "end": {"dateTime": "2025-02-02T15:00:00Z"}}
-    fake_service = type("S", (), {"events": lambda self: FakeEventsInsert(event_body)})()
-    created = calendar_utils.create_event(fake_service, event_body)
-    assert created.get("created") is True
-    assert created["summary"] == event_body["summary"]
-    assert created["start"] == event_body["start"]
-    assert created["end"] == event_body["end"]
+def test_create_event_returns_body_plus_calendarId():
+    body = {
+        "summary": "My Test Event",
+        "start": {"dateTime": "2025-01-01T10:00:00Z"},
+        "end": {"dateTime": "2025-01-01T11:00:00Z"},
+    }
+    fake = FakeService()
+    result = create_event(fake, body)
+    # should echo back calendarId='primary' plus all keys of body
+    assert result["calendarId"] == "primary"
+    assert result["summary"] == "My Test Event"
+    assert result["start"]["dateTime"] == "2025-01-01T10:00:00Z"
+    assert result["end"]["dateTime"] == "2025-01-01T11:00:00Z"
+    # ensure insert was called with correct args
+    assert fake.insert_args == ("primary", body)
