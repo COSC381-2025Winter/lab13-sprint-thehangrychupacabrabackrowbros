@@ -1,5 +1,10 @@
 name: Python CI
-on: [push, pull_request]
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
@@ -9,7 +14,7 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3
 
-      - name: Set up Python
+      - name: Set up Python 3.12
         uses: actions/setup-python@v4
         with:
           python-version: '3.12'
@@ -21,4 +26,4 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest --maxfail=1 --disable-warnings -q --cov=. --cov-report=xml
+          pytest --cov=. --cov-report=xml
