@@ -9,6 +9,12 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    # run all `run:` steps inside the TaskSchedulerApp directory
+    defaults:
+      run:
+        working-directory: TaskSchedulerApp
+
     steps:
       - name: Check out code
         uses: actions/checkout@v3
