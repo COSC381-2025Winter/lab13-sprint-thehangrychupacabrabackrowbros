@@ -28,7 +28,7 @@ jobs:
         pytest --cov=.
 
     - name: Upload coverage to GitHub
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v2
       with:
         name: coverage-report
         path: htmlcov/
