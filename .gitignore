@@ -1,0 +1,8 @@
+# Keep credentials out of version control
+credentials.json
+token.json
+
+# Typical Python ignore patterns
+__pycache__/
+*.pyc
+env/
