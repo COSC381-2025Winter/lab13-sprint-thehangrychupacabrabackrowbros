@@ -5,11 +5,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    # tell every run step to work inside TaskSchedulerApp/
-    defaults:
-      run:
-        working-directory: TaskSchedulerApp
-
     steps:
       - name: Check out code
         uses: actions/checkout@v3
@@ -26,4 +21,4 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest --cov=. --cov-report=xml
+          pytest --maxfail=1 --disable-warnings -q --cov=. --cov-report=xml
