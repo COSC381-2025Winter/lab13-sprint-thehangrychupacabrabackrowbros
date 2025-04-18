@@ -71,7 +71,7 @@ def clear_completed_tasks():
     checkbox_refs = new_refs
     sort_tasks()
 
-def sort_tasks():
+def sort_tasks(*args):
     for widget in task_list_container.winfo_children():
         widget.destroy()
     checkbox_refs.clear()
