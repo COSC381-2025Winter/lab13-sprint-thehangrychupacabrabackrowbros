@@ -78,10 +78,11 @@ def sort_tasks(*args):
 
     grouped = {}
     for task in sorted(all_tasks, key=lambda t: (t['date'], t['time'] or datetime.min)):
-        date_key = task['date'].strftime("%-m/%-d/%y")
+        date_key = task['date'].strftime("%#m/%#d/%y")  # Windows-compatible
         if date_key not in grouped:
             grouped[date_key] = []
         grouped[date_key].append(task)
+
 
     for date_key, tasks in grouped.items():
         ctk.CTkLabel(task_list_container, text=f"📅 {date_key}", font=custom_font).pack(anchor='w', padx=10, pady=(10, 0))
