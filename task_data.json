@@ -1,8 +1,43 @@
-[
-  {
-    "date": "2025-01-01",
-    "time": "02:00",
-    "duration": "0.5 hours",
-    "task": "Test1"
-  }
-]
+{
+  "2025-01-01": [
+    {
+      "time": "01:00",
+      "duration": "1.0 hours",
+      "task": "Test1"
+    },
+    {
+      "time": "01:00",
+      "duration": "0.5 hours",
+      "task": "Test6"
+    },
+    {
+      "time": "01:30",
+      "duration": "0.5 hours",
+      "task": "Test5"
+    },
+    {
+      "time": "02:00",
+      "duration": "0.5 hours",
+      "task": "Test 4"
+    }
+  ],
+  "2025-01-02": [
+    {
+      "time": "01:00",
+      "duration": "0.5 hours",
+      "task": "Test5"
+    },
+    {
+      "time": "02:00",
+      "duration": "0.5 hours",
+      "task": "Test3"
+    }
+  ],
+  "2025-01-03": [
+    {
+      "time": "03:00",
+      "duration": "0.5 hours",
+      "task": "Test2"
+    }
+  ]
+}
