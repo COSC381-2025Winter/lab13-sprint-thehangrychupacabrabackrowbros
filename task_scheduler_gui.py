@@ -2,6 +2,7 @@ import json
 import os
 import customtkinter as ctk
 from datetime import datetime
+import platform
 
 # Appearance
 ctk.set_appearance_mode("Dark")
@@ -12,7 +13,7 @@ app.title("Google Calendar Integrated Task Scheduler")
 app.minsize(600, 500)
 
 custom_font = ("Comic Sans MS", 16)
-DATA_FILE = "task_data.json"
+DATA_FILE = os.environ.get("DATA_FILE", "task_data.json")
 all_tasks = []
 checkbox_refs = []
 
@@ -117,6 +118,12 @@ def sort_tasks():
 
             checkbox_refs.append((task, var, task_frame))
 
+def platform_strftime(date_obj, unix_format, windows_format):
+    try:
+        return date_obj.strftime(unix_format)
+    except ValueError:
+        return date_obj.strftime(windows_format)
+
 def submit_task():
     month = month_var.get()
     day = day_var.get()
@@ -126,27 +133,23 @@ def submit_task():
     period = am_pm_var.get()
     duration = duration_var.get()
     task_name = task_entry.get("1.0", "end").strip()
-
     if task_name == task_hint:
         task_name = ""
-
     parsed_date = parse_date(month, day, year)
     parsed_time = format_time(hour, minute, period) if hour and minute else None
-
-    if duration == "1.0":
-        formatted_duration = f"{duration} hour\t"
-    elif duration:
-        formatted_duration = f"{duration} hours\t"
-    else:
-        formatted_duration = None
-
+    if not parsed_date:
+        messagebox.showerror("Invalid Date", "Please enter a valid date.")
+        return
+    if not task_name.strip():
+        messagebox.showerror("Missing Task", "Task name cannot be empty.")
+        return
+    formatted_duration = f"{duration} hour\t" if duration == "1" else f"{duration} hours\t" if duration else None
     all_tasks.append({
         "date": parsed_date,
         "time": parsed_time,
         "duration": formatted_duration,
         "task_name": task_name.strip()
     })
-
     year_entry.delete(0, ctk.END)
     task_entry.delete("1.0", ctk.END)
     set_task_hint()
@@ -155,7 +158,6 @@ def submit_task():
     save_tasks()
     sort_tasks()
     check_submit_ready()
-
 
 # --- Adjusted save_tasks function to sort dates chronologically ---
 def save_tasks():
@@ -166,24 +168,24 @@ def save_tasks():
         entry = {"time": time_str, "duration": task['duration'], "task": task['task_name']}
         grouped.setdefault(date_key, []).append(entry)
 
-    # Sort tasks within each date
     for task_list in grouped.values():
         task_list.sort(key=lambda t: t['time'] or "")
 
-    # Sort the grouped dictionary by date keys
     sorted_grouped = dict(sorted(grouped.items(), key=lambda x: datetime.strptime(x[0], "%Y-%m-%d")))
 
     with open(DATA_FILE, "w") as f:
         json.dump(sorted_grouped, f, indent=2)
 
-# --- Adjusted load_tasks function to preserve task order as stored in JSON ---
+# --- Adjusted load_tasks function to handle empty file gracefully ---
 def load_tasks():
     if not os.path.exists(DATA_FILE):
         return
     try:
+        if os.path.getsize(DATA_FILE) == 0:
+            return
         with open(DATA_FILE, "r") as f:
             grouped = json.load(f)
-            for date_key in sorted(grouped.keys(), key=lambda x: datetime.strptime(x, "%Y-%m-%d")):
+            for date_key in grouped:
                 date_obj = datetime.strptime(date_key, "%Y-%m-%d")
                 for entry in grouped[date_key]:
                     time_obj = datetime.strptime(entry['time'], "%H:%M") if entry['time'] else None
@@ -193,6 +195,8 @@ def load_tasks():
                         "duration": entry.get('duration'),
                         "task_name": entry.get('task')
                     })
+    except json.JSONDecodeError:
+        print("Empty or invalid JSON file detected, starting fresh.")
     except Exception as e:
         print("Error loading task_data.json:", e)
 
@@ -249,7 +253,8 @@ task_scroll = ctk.CTkScrollableFrame(app, height=300)
 task_scroll.pack(fill='both', expand=True, padx=5, pady=(0,10))
 task_list_container = task_scroll
 
-load_tasks()
-sort_tasks()
-app.after(1, lambda: app.attributes('-topmost', True))
-app.mainloop()
+if __name__ == "__main__":
+    load_tasks()
+    sort_tasks()
+    app.after(1, lambda: app.attributes('-topmost', True))
+    app.mainloop()
