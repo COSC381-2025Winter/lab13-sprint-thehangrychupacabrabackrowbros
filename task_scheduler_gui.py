@@ -26,7 +26,7 @@ def parse_date(m, d, y):
     try:
         y = int(y) if y.strip() else 2025
         return datetime(y, int(m), int(d))
-    except:
+    except ValueError:
         return None
 
 def format_time(h, m, period):
@@ -37,10 +37,10 @@ def format_time(h, m, period):
         elif period == "AM" and h == 12:
             h = 0
         return datetime(2000, 1, 1, h, m)
-    except:
+    except ValueError:
         return None
 
-def check_submit_ready(*args):
+def check_submit_ready():
     content = task_entry.get("1.0", "end").strip()
     if content and content != task_hint:
         submit_btn.configure(state="normal", fg_color="#1B64C0")
@@ -129,7 +129,12 @@ def submit_task():
         messagebox.showerror("Missing Task", "Task name cannot be empty.")
         return
 
-    formatted_duration = f"{duration} hour" if duration == "1" else f"{duration} hours" if duration else None
+    if duration == "1":
+        formatted_duration = f"{duration} hour"
+    elif duration:
+        formatted_duration = f"{duration} hours"
+    else:
+        formatted_duration = None
 
     all_tasks.append({
         "date": parsed_date,
