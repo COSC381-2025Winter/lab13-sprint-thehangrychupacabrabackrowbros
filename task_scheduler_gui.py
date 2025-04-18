@@ -1,7 +1,10 @@
+import json
+import os
 import customtkinter as ctk
 from tkinter import messagebox
 from datetime import datetime
 
+# Appearance
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
@@ -10,6 +13,7 @@ app.title("Google Calendar Integrated Task Scheduler")
 app.minsize(600, 500)
 
 custom_font = ("Comic Sans MS", 16)
+DATA_FILE = "task_data.json"
 all_tasks = []
 checkbox_refs = []
 
@@ -69,9 +73,10 @@ def clear_completed_tasks():
             frame.destroy()
     all_tasks = remaining_tasks
     checkbox_refs = new_refs
+    save_tasks()
     sort_tasks()
 
-def sort_tasks(*args):
+def sort_tasks():
     for widget in task_list_container.winfo_children():
         widget.destroy()
     checkbox_refs.clear()
@@ -79,13 +84,12 @@ def sort_tasks(*args):
     grouped = {}
     for task in sorted(all_tasks, key=lambda t: (t['date'], t['time'] or datetime.min)):
         try:
-            date_key = task['date'].strftime("%-m/%-d/%y")  # Unix-compatible
-        except ValueError: 
-            date_key = task['date'].strftime("%#m/%#d/%y")  # Windows-compatible
+            date_key = task['date'].strftime("%-m/%-d/%y")
+        except ValueError:
+            date_key = task['date'].strftime("%#m/%#d/%y")
         if date_key not in grouped:
             grouped[date_key] = []
         grouped[date_key].append(task)
-    
 
     for date_key, tasks in grouped.items():
         ctk.CTkLabel(task_list_container, text=f"📅 {date_key}", font=custom_font).pack(anchor='w', padx=10, pady=(10, 0))
@@ -100,11 +104,10 @@ def sort_tasks(*args):
             label_parts = []
             if task['time']:
                 try:
-                    time_str = task['time'].strftime("%-I:%M %p")  # Unix-compatible
+                    time_str = task['time'].strftime("%-I:%M %p")
                 except ValueError:
-                    time_str = task['time'].strftime("%#I:%M %p")  # Windows-compatible
+                    time_str = task['time'].strftime("%#I:%M %p")
                 label_parts.append(time_str)
-
             if task['duration']:
                 label_parts.append(task['duration'])
             if label_parts:
@@ -114,6 +117,38 @@ def sort_tasks(*args):
             task_label.pack(side='left', padx=5, fill="x", expand=True)
 
             checkbox_refs.append((task, var, task_frame))
+
+def save_tasks():
+    serialized = []
+    for task in all_tasks:
+        date_str = task['date'].strftime("%Y-%m-%d")
+        time_str = task['time'].strftime("%H:%M") if task['time'] else None
+        serialized.append({
+            "date": date_str,
+            "time": time_str,
+            "duration": task['duration'],
+            "task": task['task_name']
+        })
+    with open(DATA_FILE, "w") as f:
+        json.dump(serialized, f, indent=2)
+
+def load_tasks():
+    if not os.path.exists(DATA_FILE):
+        return
+    try:
+        with open(DATA_FILE, "r") as f:
+            data = json.load(f)
+            for item in data:
+                date = datetime.strptime(item['date'], "%Y-%m-%d")
+                time = datetime.strptime(item['time'], "%H:%M") if item['time'] else None
+                all_tasks.append({
+                    "date": date,
+                    "time": time,
+                    "duration": item['duration'],
+                    "task_name": item['task']
+                })
+    except Exception as e:
+        print("Error loading task_data.json:", e)
 
 def submit_task():
     month = month_var.get()
@@ -138,12 +173,7 @@ def submit_task():
         messagebox.showerror("Missing Task", "Task name cannot be empty.")
         return
 
-    if duration == "1":
-        formatted_duration = f"{duration} hour"
-    elif duration:
-        formatted_duration = f"{duration} hours"
-    else:
-        formatted_duration = None
+    formatted_duration = f"{duration} hour" if duration == "1" else f"{duration} hours" if duration else None
 
     all_tasks.append({
         "date": parsed_date,
@@ -157,6 +187,7 @@ def submit_task():
     set_task_hint()
     for var in [month_var, day_var, hour_var, minute_var, duration_var]:
         var.set("")
+    save_tasks()
     sort_tasks()
     check_submit_ready()
 
@@ -175,22 +206,23 @@ ctk.CTkLabel(input_frame, text=" ").grid(row=0, column=1)
 month_var = ctk.StringVar()
 day_var = ctk.StringVar()
 year_entry = ctk.CTkEntry(input_frame, width=60, validate="key", validatecommand=(vcmd, "%S"), placeholder_text="2025")
-ctk.CTkOptionMenu(input_frame, variable=month_var, values=[str(i) for i in range(1, 13)], width=50).grid(row=0, column=2, sticky="w", padx=2)
-ctk.CTkOptionMenu(input_frame, variable=day_var, values=[str(i) for i in range(1, 32)], width=50).grid(row=0, column=3, sticky="w", padx=2)
-year_entry.grid(row=0, column=4, sticky="w", padx=2)
+ctk.CTkOptionMenu(input_frame, variable=month_var, values=[str(i) for i in range(1, 13)], width=50).grid(row=0, column=2, padx=2)
+ctk.CTkOptionMenu(input_frame, variable=day_var, values=[str(i) for i in range(1, 32)], width=50).grid(row=0, column=3, padx=2)
+year_entry.grid(row=0, column=4, padx=2)
 year_entry.bind("<FocusOut>", validate_year_input)
 
 hour_var = ctk.StringVar()
 minute_var = ctk.StringVar()
 am_pm_var = ctk.StringVar(value="AM")
-ctk.CTkOptionMenu(input_frame, variable=hour_var, values=[str(i) for i in range(1, 13)], width=50).grid(row=1, column=2, sticky="w", padx=2)
-ctk.CTkOptionMenu(input_frame, variable=minute_var, values=[f"{i:02d}" for i in range(0, 60, 5)], width=50).grid(row=1, column=3, sticky="w", padx=2)
-ctk.CTkOptionMenu(input_frame, variable=am_pm_var, values=["AM", "PM"], width=70).grid(row=1, column=4, sticky="w", padx=2)
+ctk.CTkOptionMenu(input_frame, variable=hour_var, values=[str(i) for i in range(1, 13)], width=50).grid(row=1, column=2, padx=2)
+ctk.CTkOptionMenu(input_frame, variable=minute_var, values=[f"{i:02d}" for i in range(0, 60, 5)], width=50).grid(row=1, column=3, padx=2)
+ctk.CTkOptionMenu(input_frame, variable=am_pm_var, values=["AM", "PM"], width=70).grid(row=1, column=4, padx=2)
 
 duration_var = ctk.StringVar()
-ctk.CTkOptionMenu(input_frame, variable=duration_var, values=[str(i/2) for i in range(1, 25)], width=50).grid(row=2, column=2, sticky="w", padx=2)
-ctk.CTkLabel(input_frame, text="hours").grid(row=2, column=3, columnspan=2, sticky="w", padx=2)
+ctk.CTkOptionMenu(input_frame, variable=duration_var, values=[str(i/2) for i in range(1, 25)], width=50).grid(row=2, column=2, padx=2)
+ctk.CTkLabel(input_frame, text="hours").grid(row=2, column=3, columnspan=2, padx=2, sticky="w")
 
+# Task input
 task_label = ctk.CTkLabel(entry_wrapper, text="Task:")
 task_label.pack(anchor="w", padx=10)
 task_entry = ctk.CTkTextbox(entry_wrapper, height=60, width=400)
@@ -213,4 +245,6 @@ task_scroll = ctk.CTkScrollableFrame(app, height=300)
 task_scroll.pack(fill='both', expand=True, padx=5, pady=(0, 10))
 task_list_container = task_scroll
 
+load_tasks()
+sort_tasks()
 app.mainloop()
