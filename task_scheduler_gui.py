@@ -2,7 +2,7 @@ import customtkinter as ctk
 from tkinter import messagebox
 from datetime import datetime
 
-ctk.set_appearance_mode("System")
+ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 app = ctk.CTk()
