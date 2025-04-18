@@ -8,27 +8,46 @@ from google.auth.transport.requests import Request
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = ['https://www.googleapis.com/auth/calendar.events']
 
-def add_task(service, title: str, description: str, start_datetime: datetime.datetime, duration_minutes: int = 60):
+def add_tasks_from_json(service, json_path="task_data.json", max_results=50):
     """
-    Adds a new task (event) to Google Calendar.
+    Loads tasks from a JSON file and inserts only those not already in the calendar.
     """
-    end_datetime = start_datetime + datetime.timedelta(minutes=duration_minutes)
+    # Load tasks from the JSON file
+    with open(json_path, 'r') as file:
+        tasks = json.load(file)
 
-    event_body = {
-        'summary': title,
-        'description': description,
-        'start': {
-            'dateTime': start_datetime.isoformat(),
-            'timeZone': 'America/New_York',  # change as needed
-        },
-        'end': {
-            'dateTime': end_datetime.isoformat(),
-            'timeZone': 'America/New_York',
-        },
-    }
+    # Fetch current events from calendar
+    existing_events = list_upcoming_events(service, max_results=max_results)
 
-    event = create_event(service, event_body)
-    print(f"📅 Task '{title}' created successfully: {event.get('htmlLink')}")
+    # Normalize existing events for easier comparison
+    existing_lookup = set(
+        (e['summary'], e['start']['dateTime'][:16])  # e.g., ("Meeting", "2025-04-20T10:00")
+        for e in existing_events if 'summary' in e and 'start' in e and 'dateTime' in e['start']
+    )
+
+    for task in tasks:
+        # Format the task into an event body
+        event = {
+            'summary': task['title'],
+            'description': task.get('description', ''),
+            'start': {
+                'dateTime': task['start'],  # Must be in ISO 8601 format
+                'timeZone': task.get('timeZone', 'America/New_York'),
+            },
+            'end': {
+                'dateTime': task['end'],
+                'timeZone': task.get('timeZone', 'America/New_York'),
+            },
+        }
+
+        task_key = (event['summary'], event['start']['dateTime'][:16])
+
+        # Only create event if it’s not already on the calendar
+        if task_key not in existing_lookup:
+            create_event(service, event)
+            print(f"✅ Created: {event['summary']} at {event['start']['dateTime']}")
+        else:
+            print(f"⚠️ Skipped duplicate: {event['summary']} at {event['start']['dateTime']}")
 
 def get_calendar_service():
     """Authenticate via OAuth2 and return a Google Calendar service object."""
@@ -87,4 +106,5 @@ def create_event(service, event_body: dict):
 # Quick smoke test when run as a script
 if __name__ == '__main__':
     service = get_calendar_service()
+    add_tasks_from_json(service)
     print(f"✅ Google Calendar service created: {service}")
