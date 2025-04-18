@@ -8,6 +8,28 @@ from google.auth.transport.requests import Request
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = ['https://www.googleapis.com/auth/calendar.events']
 
+def add_task(service, title: str, description: str, start_datetime: datetime.datetime, duration_minutes: int = 60):
+    """
+    Adds a new task (event) to Google Calendar.
+    """
+    end_datetime = start_datetime + datetime.timedelta(minutes=duration_minutes)
+
+    event_body = {
+        'summary': title,
+        'description': description,
+        'start': {
+            'dateTime': start_datetime.isoformat(),
+            'timeZone': 'America/New_York',  # change as needed
+        },
+        'end': {
+            'dateTime': end_datetime.isoformat(),
+            'timeZone': 'America/New_York',
+        },
+    }
+
+    event = create_event(service, event_body)
+    print(f"📅 Task '{title}' created successfully: {event.get('htmlLink')}")
+
 def get_calendar_service():
     """Authenticate via OAuth2 and return a Google Calendar service object."""
     creds = None
