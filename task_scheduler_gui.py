@@ -133,7 +133,12 @@ def submit_task():
     parsed_date = parse_date(month, day, year)
     parsed_time = format_time(hour, minute, period) if hour and minute else None
 
-    formatted_duration = f"{duration} hour" if duration == "1" else f"{duration} hours" if duration else None
+    if duration == "1.0":
+        formatted_duration = f"{duration} hour\t"
+    elif duration:
+        formatted_duration = f"{duration} hours\t"
+    else:
+        formatted_duration = None
 
     all_tasks.append({
         "date": parsed_date,
