@@ -99,7 +99,12 @@ def sort_tasks(*args):
 
             label_parts = []
             if task['time']:
-                label_parts.append(task['time'].strftime("%-I:%M %p"))
+                try:
+                    time_str = task['time'].strftime("%-I:%M %p")  # Unix-compatible
+                except ValueError:
+                    time_str = task['time'].strftime("%#I:%M %p")  # Windows-compatible
+                label_parts.append(time_str)
+
             if task['duration']:
                 label_parts.append(task['duration'])
             if label_parts:
