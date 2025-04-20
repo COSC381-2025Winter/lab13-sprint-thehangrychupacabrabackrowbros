@@ -25,6 +25,7 @@ coverage.xml
 
 # Local runtime and test data
 tests/test_data_temp.json
+main.py
 
 # OS backup files
 *.swp
