@@ -1,5 +1,35 @@
+# Python bytecode and cache
 __pycache__/
-*.pyc
-token.pickle
+*.py[cod]
+*.pyo
+
+# macOS system files
+.DS_Store
+
+# VSCode settings
+.vscode/
+
+# Virtual environments and packaging
 .venv/
-.coverage/
+env/
+venv/
+*.egg-info/
+pip-wheel-metadata/
+
+# Coverage & test outputs
+.coverage
+htmlcov/
+coverage.xml
+.pytest_cache/
+.cache/
+
+# Local runtime and test data
+tests/test_data_temp.json
+
+# OS backup files
+*.swp
+*.bak
+*.tmp
+
+# Jupyter checkpoints (just in case)
+.ipynb_checkpoints/
