@@ -19,7 +19,7 @@ A Python application for managing tasks with Google Calendar sync, featuring a m
 git clone https://github.com/yourusername/TaskSchedulerApp.git
 cd TaskSchedulerApp
 
-Create and activate virtual envirmonet
+Create and activate virtual environment
 
 python -m venv .venv
 # Windows:
