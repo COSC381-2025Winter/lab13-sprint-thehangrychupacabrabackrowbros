@@ -9,7 +9,7 @@ from datetime import datetime
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from task_scheduler_gui import parse_date, format_time, save_tasks, load_tasks, all_tasks, checkbox_refs
 
-DATA_FILE = os.environ["DATA_FILE"]  # <- This is the missing piece
+DATA_FILE = os.environ["DATA_FILE"]
 
 @pytest.fixture(scope="function")
 def setup_data_file():
@@ -39,20 +39,15 @@ def test_format_time_invalid():
 def test_save_and_load_tasks(setup_data_file):
     all_tasks.clear()
     checkbox_refs.clear()
-
     all_tasks.extend([
         {"date": datetime(2025, 2, 2), "time": datetime(2000, 1, 1, 2, 0), "duration": "0.5 hours\t", "task_name": "Test"},
         {"date": datetime(2025, 3, 1), "time": datetime(2000, 1, 1, 1, 5), "duration": "0.5 hours\t", "task_name": "Test2"}
     ])
-
     save_tasks()
-
-    assert os.path.exists(os.environ["DATA_FILE"])
-
+    assert os.path.exists(DATA_FILE)
     all_tasks.clear()
     checkbox_refs.clear()
     load_tasks()
-
     assert len(all_tasks) == 2
     assert all_tasks[0]['task_name'] == "Test"
     assert all_tasks[1]['task_name'] == "Test2"
@@ -60,9 +55,7 @@ def test_save_and_load_tasks(setup_data_file):
 def test_load_tasks_empty_file(setup_data_file):
     all_tasks.clear()
     checkbox_refs.clear()
-
     load_tasks()
-
     assert len(all_tasks) == 0
 
 def test_save_tasks_file_structure(setup_data_file):
@@ -74,17 +67,15 @@ def test_save_tasks_file_structure(setup_data_file):
         "task_name": "Test"
     })
     save_tasks()
-
-    with open(os.environ["DATA_FILE"], "r") as f:
+    with open(DATA_FILE, "r") as f:
         data = json.load(f)
-
     assert "2025-02-02" in data
     assert data["2025-02-02"][0]["task"] == "Test"
     assert data["2025-02-02"][0]["duration"] == "0.5 hours\t"
     assert data["2025-02-02"][0]["time"] == "02:00"
 
 
-# --- Additional Tests to Reach 100% Coverage ---
+# --- Additional Tests for Full Coverage ---
 
 from unittest.mock import patch, MagicMock
 import task_scheduler_gui as gui
@@ -109,3 +100,45 @@ def test_check_submit_ready_disables_button_if_empty(mock_get, mock_config):
     gui.task_hint = "Write your task or describe it here."
     gui.check_submit_ready()
     mock_config.assert_called_with(state="disabled", fg_color="gray")
+
+
+@patch("task_scheduler_gui.messagebox.showerror")
+@patch.object(gui.task_entry, "get", return_value="Valid Task")
+@patch.object(gui.month_var, "get", return_value="2")
+@patch.object(gui.day_var, "get", return_value="30")  # Invalid date
+@patch.object(gui.year_entry, "get", return_value="2025")
+def test_submit_task_invalid_date(mock_year, mock_day, mock_month, mock_get, mock_error):
+    gui.submit_task()
+    mock_error.assert_called_with("Invalid Date", "Please enter a valid date.")
+
+@patch("task_scheduler_gui.messagebox.showerror")
+@patch.object(gui.task_entry, "get", return_value="Write your task or describe it here.")
+@patch.object(gui.month_var, "get", return_value="1")
+@patch.object(gui.day_var, "get", return_value="1")
+@patch.object(gui.year_entry, "get", return_value="2025")
+def test_submit_task_empty_name(mock_year, mock_day, mock_month, mock_get, mock_error):
+    gui.submit_task()
+    mock_error.assert_called_with("Missing Task", "Task name cannot be empty.")
+
+def test_validate_year_input_invalid(monkeypatch):
+    gui.year_entry.delete(0, "end")
+    gui.year_entry.insert(0, "1999")
+    gui.validate_year_input(MagicMock())
+    assert gui.year_entry.get() == ""
+
+def test_clear_task_hint_removes_hint():
+    gui.task_entry.delete("1.0", "end")
+    gui.task_entry.insert("1.0", gui.task_hint)
+    gui.clear_task_hint()
+    assert gui.task_entry.get("1.0", "end").strip() == ""
+
+def test_set_task_hint_inserts_hint():
+    gui.task_entry.delete("1.0", "end")
+    gui.set_task_hint()
+    assert gui.task_entry.get("1.0", "end").strip() == gui.task_hint
+
+def test_platform_strftime_unix_then_windows():
+    date = datetime(2025, 2, 2)
+    result = gui.platform_strftime(date, "%-m/%-d/%y", "%#m/%#d/%y")
+    # One of these two will succeed depending on the platform
+    assert result in ["2/2/25", "02/02/25", "2/2/25", "2/2/2025"]

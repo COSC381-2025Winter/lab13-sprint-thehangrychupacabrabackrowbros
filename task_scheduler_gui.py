@@ -3,6 +3,9 @@ import os
 import customtkinter as ctk
 from datetime import datetime
 import platform
+from tkinter import messagebox  # ✅ add this
+from calendar_utils import create_event, delete_task
+
 
 # Appearance
 ctk.set_appearance_mode("Dark")
@@ -65,16 +68,33 @@ def clear_completed_tasks():
     global all_tasks, checkbox_refs
     remaining_tasks = []
     new_refs = []
+
+    try:
+        from calendar_utils import get_calendar_service
+        service = get_calendar_service()
+    except Exception as e:
+        print("❌ Could not load calendar service:", e)
+        service = None
+
     for (task, var, frame) in checkbox_refs:
         if var.get() == 0:
             remaining_tasks.append(task)
             new_refs.append((task, var, frame))
         else:
             frame.destroy()
+            # --- ✅ Google Calendar Deletion ---
+            if service:
+                start_time = task['time'].isoformat()[:16] if task['time'] else task['date'].isoformat()[:16]
+                try:
+                    delete_task(service, task['task_name'], start_time)
+                except Exception as e:
+                    print(f"❌ Could not delete {task['task_name']}:", e)
+
     all_tasks = remaining_tasks
     checkbox_refs = new_refs
     save_tasks()
     sort_tasks()
+
 
 def sort_tasks():
     for widget in task_list_container.winfo_children():
@@ -150,6 +170,33 @@ def submit_task():
         "duration": formatted_duration,
         "task_name": task_name.strip()
     })
+
+    # --- ✅ Google Calendar Integration ---
+    if parsed_time and duration:
+        end_time = parsed_time.replace(hour=parsed_time.hour + int(float(duration)))
+    else:
+        end_time = parsed_time or parsed_date
+
+    event_body = {
+        "summary": task_name.strip(),
+        "start": {
+            "dateTime": parsed_time.isoformat() if parsed_time else parsed_date.isoformat(),
+            "timeZone": "America/New_York"
+        },
+        "end": {
+            "dateTime": end_time.isoformat(),
+            "timeZone": "America/New_York"
+        }
+    }
+
+    try:
+        from calendar_utils import get_calendar_service
+        service = get_calendar_service()
+        create_event(service, event_body)
+        print("✅ Event added to Google Calendar")
+    except Exception as e:
+        print("❌ Failed to add event to calendar:", e)
+
     year_entry.delete(0, ctk.END)
     task_entry.delete("1.0", ctk.END)
     set_task_hint()

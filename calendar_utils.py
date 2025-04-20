@@ -1,5 +1,6 @@
 import os
 import pickle  # for token storage
+import json
 import datetime
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -26,12 +27,15 @@ def add_tasks_from_json(service, json_path="task_data.json", max_results=50):
     )
 
     for task in tasks:
-        # Format the task into an event body
+        # Skip malformed or incomplete tasks
+        if not task.get('start') or not task.get('end') or not task.get('title'):
+            continue
+
         event = {
             'summary': task['title'],
             'description': task.get('description', ''),
             'start': {
-                'dateTime': task['start'],  # Must be in ISO 8601 format
+                'dateTime': task['start'],
                 'timeZone': task.get('timeZone', 'America/New_York'),
             },
             'end': {
@@ -41,6 +45,7 @@ def add_tasks_from_json(service, json_path="task_data.json", max_results=50):
         }
 
         task_key = (event['summary'], event['start']['dateTime'][:16])
+
 
         # Only create event if it’s not already on the calendar
         if task_key not in existing_lookup:
@@ -79,7 +84,8 @@ def list_upcoming_events(service, max_results: int = 10):
     """
     Returns the next `max_results` events on the user's primary calendar.
     """
-    now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
     events_result = (
         service.events()
                .list(
