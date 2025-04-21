@@ -7,7 +7,10 @@ from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 
 # If modifying these scopes, delete the file token.pickle.
-SCOPES = ['https://www.googleapis.com/auth/calendar.events']
+SCOPES = [
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/calendar'  # Needed for non-primary calendars
+]
 
 def add_tasks_from_json(service, json_path="task_data.json", max_results=50):
     """
@@ -89,7 +92,7 @@ def list_upcoming_events(service, max_results: int = 10):
     events_result = (
         service.events()
                .list(
-                   calendarId='432a356b9fd99deec8bfe1cf5f9980e1de8a4387106bcbdc6d5ed34244315d1d@group.calendar.google.com',
+                   calendarId='primary',
                    timeMin=now,
                    maxResults=max_results,
                    singleEvents=True,
@@ -105,7 +108,7 @@ def create_event(service, event_body: dict):
     `event_body` must follow the Google Calendar API spec.
     """
     return service.events().insert(
-        calendarId='432a356b9fd99deec8bfe1cf5f9980e1de8a4387106bcbdc6d5ed34244315d1d@group.calendar.google.com',
+        calendarId='primary',
         body=event_body
     ).execute()
 
@@ -124,7 +127,7 @@ def delete_task(service, title: str, start_time: str, max_results: int = 50):
         # Match title and first 16 chars of ISO time (to match to the minute)
         if event_title == title and event_start[:16] == start_time[:16]:
             event_id = event['id']
-            service.events().delete(calendarId='432a356b9fd99deec8bfe1cf5f9980e1de8a4387106bcbdc6d5ed34244315d1d@group.calendar.google.com', eventId=event_id).execute()
+            service.events().delete(calendarId='primary', eventId=event_id).execute()
             print(f"🗑️ Deleted: {title} at {start_time}")
             return
 
@@ -140,11 +143,11 @@ if __name__ == '__main__':
     test_event = {
         'summary': 'Test Event to Delete',
         'start': {
-            'dateTime': '2025-04-21T14:00:00',
+            'dateTime': '2025-04-20T14:00:00',
             'timeZone': 'America/New_York',
         },
         'end': {
-            'dateTime': '2025-04-21T15:00:00',
+            'dateTime': '2025-04-20T15:00:00',
             'timeZone': 'America/New_York',
         },
     }
