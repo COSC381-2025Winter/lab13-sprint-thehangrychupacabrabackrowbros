@@ -85,14 +85,14 @@ def get_calendar_service():
 
 def list_upcoming_events(service, max_results: int = 10):
     """
-    Returns the next `max_results` events on the user's primary calendar.
+    Returns the next `max_results` events on the calendar.
     """
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     events_result = (
         service.events()
                .list(
-                   calendarId='primary',
+                   calendarId='432a356b9fd99deec8bfe1cf5f9980e1de8a4387106bcbdc6d5ed34244315d1d@group.calendar.google.com',
                    timeMin=now,
                    maxResults=max_results,
                    singleEvents=True,
@@ -104,11 +104,11 @@ def list_upcoming_events(service, max_results: int = 10):
 
 def create_event(service, event_body: dict):
     """
-    Creates an event on the user's primary calendar.
+    Creates an event on the calendar.
     `event_body` must follow the Google Calendar API spec.
     """
     return service.events().insert(
-        calendarId='primary',
+        calendarId='432a356b9fd99deec8bfe1cf5f9980e1de8a4387106bcbdc6d5ed34244315d1d@group.calendar.google.com',
         body=event_body
     ).execute()
 
@@ -127,7 +127,7 @@ def delete_task(service, title: str, start_time: str, max_results: int = 50):
         # Match title and first 16 chars of ISO time (to match to the minute)
         if event_title == title and event_start[:16] == start_time[:16]:
             event_id = event['id']
-            service.events().delete(calendarId='primary', eventId=event_id).execute()
+            service.events().delete(calendarId='432a356b9fd99deec8bfe1cf5f9980e1de8a4387106bcbdc6d5ed34244315d1d@group.calendar.google.com', eventId=event_id).execute()
             print(f"🗑️ Deleted: {title} at {start_time}")
             return
 
