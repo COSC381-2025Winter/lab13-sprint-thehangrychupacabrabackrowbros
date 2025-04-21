@@ -1,5 +1,6 @@
 import os
 import pickle  # for token storage
+import json
 import datetime
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -26,12 +27,15 @@ def add_tasks_from_json(service, json_path="task_data.json", max_results=50):
     )
 
     for task in tasks:
-        # Format the task into an event body
+        # Skip malformed or incomplete tasks
+        if not task.get('start') or not task.get('end') or not task.get('title'):
+            continue
+
         event = {
             'summary': task['title'],
             'description': task.get('description', ''),
             'start': {
-                'dateTime': task['start'],  # Must be in ISO 8601 format
+                'dateTime': task['start'],
                 'timeZone': task.get('timeZone', 'America/New_York'),
             },
             'end': {
@@ -41,6 +45,7 @@ def add_tasks_from_json(service, json_path="task_data.json", max_results=50):
         }
 
         task_key = (event['summary'], event['start']['dateTime'][:16])
+
 
         # Only create event if it’s not already on the calendar
         if task_key not in existing_lookup:
@@ -79,7 +84,8 @@ def list_upcoming_events(service, max_results: int = 10):
     """
     Returns the next `max_results` events on the user's primary calendar.
     """
-    now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
     events_result = (
         service.events()
                .list(
@@ -103,8 +109,49 @@ def create_event(service, event_body: dict):
         body=event_body
     ).execute()
 
-# Quick smoke test when run as a script
+def delete_task(service, title: str, start_time: str, max_results: int = 50):
+    """
+    Deletes an event from the calendar matching the given title and start time.
+    `start_time` must be in ISO 8601 format (e.g., "2025-04-20T10:00").
+    """
+    # Fetch current events
+    existing_events = list_upcoming_events(service, max_results=max_results)
+
+    for event in existing_events:
+        event_title = event.get('summary', '')
+        event_start = event.get('start', {}).get('dateTime', '')
+
+        # Match title and first 16 chars of ISO time (to match to the minute)
+        if event_title == title and event_start[:16] == start_time[:16]:
+            event_id = event['id']
+            service.events().delete(calendarId='primary', eventId=event_id).execute()
+            print(f"🗑️ Deleted: {title} at {start_time}")
+            return
+
+    print(f"❌ No matching event found for deletion: {title} at {start_time}")
+
+
+
+    
 if __name__ == '__main__':
     service = get_calendar_service()
-    add_tasks_from_json(service)
-    print(f"✅ Google Calendar service created: {service}")
+
+    # Create a test event
+    test_event = {
+        'summary': 'Test Event to Delete',
+        'start': {
+            'dateTime': '2025-04-20T14:00:00',
+            'timeZone': 'America/New_York',
+        },
+        'end': {
+            'dateTime': '2025-04-20T15:00:00',
+            'timeZone': 'America/New_York',
+        },
+    }
+
+    # Create the event
+    create_event(service, test_event)
+    print("✅ Test event created.")
+
+    # Now delete the event
+    delete_task(service, 'Test Event to Delete', '2025-04-20T14:00')
