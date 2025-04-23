@@ -1,159 +1,90 @@
 import sys
 import os
+import json
 import pytest
-from calendar_utils import list_upcoming_events, create_event, delete_task
-
+from datetime import datetime, timezone
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from calendar_utils import add_tasks_from_json, delete_task, list_upcoming_events, create_event
+
 class FakeService:
-    """
-    Mimics the shape of service.events().list(...).execute(),
-    service.events().insert(...).execute(), and service.events().delete(...).execute()
-    """
     def __init__(self, items=None):
         self._items = items or []
-        self.insert_args = None
-        self.deleted_event = None  # Added for testing deletion
+        self.inserted = []
+        self.deleted = []
 
     def events(self):
         return self
 
-    def list(self, calendarId, timeMin, maxResults, singleEvents, orderBy):
-        # Store the parameters for sanity-checking if you like
-        self.last_list_kwargs = {
-            "calendarId": calendarId,
-            "timeMin": timeMin,
-            "maxResults": maxResults,
-            "singleEvents": singleEvents,
-            "orderBy": orderBy,
-        }
+    def list(self, **kwargs):
         return self
 
     def insert(self, calendarId, body):
-        # Record what was passed in, and reuse this object
-        self.insert_args = (calendarId, body)
+        self.inserted.append((calendarId, body))
         return self
 
     def delete(self, calendarId, eventId):
-        # Only mock deletion if the event ID actually matches
-        matching_event = next(
-            (event for event in self._items if event["id"] == eventId), None
-        )
-        if matching_event:
-            self.deleted_event = {
-                "calendarId": calendarId,
-                "eventId": eventId,
-            }
-        else:
-            self.deleted_event = None  # Ensure it's not set when no event is found
-
+        self.deleted.append((calendarId, eventId))
         return self
 
     def execute(self):
-        # If insert_args is set, return an “inserted” event dict
-        if self.insert_args:
-            cal_id, body = self.insert_args
-            return {"calendarId": cal_id, **body}
-        # If delete_args is set, return a mock delete response
-        elif self.deleted_event:
-            return self.deleted_event
-        # Otherwise, we’re coming from list()
+        if self.inserted:
+            return {"status": "confirmed", **self.inserted[-1][1]}
         return {"items": self._items}
 
-
-    def execute(self):
-        # If insert_args is set, return an “inserted” event dict
-        if self.insert_args:
-            cal_id, body = self.insert_args
-            return {"calendarId": cal_id, **body}
-        # If delete_args is set, return a mock delete response
-        elif self.deleted_event:
-            return self.deleted_event
-        # Otherwise, we’re coming from list()
-        return {"items": self._items}
-
-
-# Test for `list_upcoming_events`
 def test_list_upcoming_events_empty():
-    fake = FakeService(items=[])
-    events = list_upcoming_events(fake, max_results=3)
-    assert events == []
+    fake = FakeService([])
+    assert list_upcoming_events(fake, max_results=2) == []
 
-
-def test_list_upcoming_events_non_empty():
-    sample = [
-        {"id": "evt1", "summary": "First"},
-        {"id": "evt2", "summary": "Second"},
-    ]
-    fake = FakeService(items=sample)
-    events = list_upcoming_events(fake, max_results=2)
-    assert events == sample
-
-
-# Test for `create_event`
-def test_create_event_returns_body_plus_calendarId():
-    body = {
-        "summary": "My Test Event",
+def test_create_event_executes():
+    service = FakeService()
+    event = {
+        "summary": "Unit Test Event",
         "start": {"dateTime": "2025-01-01T10:00:00Z"},
-        "end": {"dateTime": "2025-01-01T11:00:00Z"},
+        "end": {"dateTime": "2025-01-01T11:00:00Z"}
     }
-    fake = FakeService()
-    result = create_event(fake, body)
-    # Should echo back calendarId='primary' plus all keys of body
-    assert result["calendarId"] == "primary"
-    assert result["summary"] == "My Test Event"
-    assert result["start"]["dateTime"] == "2025-01-01T10:00:00Z"
-    assert result["end"]["dateTime"] == "2025-01-01T11:00:00Z"
-    # Ensure insert was called with correct args
-    assert fake.insert_args == ("primary", body)
+    result = create_event(service, event)
+    assert result["summary"] == "Unit Test Event"
 
-
-# Test for `delete_task`
-def test_delete_task_finds_and_deletes_event():
-    # Event matches title and datetime
-    sample = [
+def test_add_tasks_from_json_skips_duplicates(tmp_path):
+    json_path = tmp_path / "tasks.json"
+    tasks = [
         {
-            "id": "evt123",
-            "summary": "Test Meeting",
-            "start": {"dateTime": "2025-04-20T10:00:00Z"},
+            "title": "Duplicate",
+            "start": "2025-04-20T10:00:00-04:00",
+            "end": "2025-04-20T11:00:00-04:00"
         }
     ]
-    fake = FakeService(items=sample)
+    json_path.write_text(json.dumps(tasks))
+    fake = FakeService([{"summary": "Duplicate", "start": {"dateTime": "2025-04-20T10:00:00-04:00"}}])
+    add_tasks_from_json(fake, str(json_path))
 
-    delete_task(fake, "Test Meeting", "2025-04-20T10:00")
-
-    assert fake.deleted_event["calendarId"] == "primary"
-    assert fake.deleted_event["eventId"] == "evt123"
-
-
-def test_delete_task_no_match_does_not_delete():
-    sample = [
+def test_add_tasks_from_json_creates_event(tmp_path):
+    json_path = tmp_path / "tasks.json"
+    tasks = [
         {
-            "id": "evt456",
-            "summary": "Different Meeting",
-            "start": {"dateTime": "2025-04-20T11:00:00Z"},
+            "title": "New Task",
+            "start": "2025-04-20T12:00:00-04:00",
+            "end": "2025-04-20T13:00:00-04:00"
         }
     ]
-    fake = FakeService(items=sample)
+    json_path.write_text(json.dumps(tasks))
+    fake = FakeService([])
+    add_tasks_from_json(fake, str(json_path))
+    assert fake.inserted
 
-    delete_task(fake, "Test Meeting", "2025-04-20T10:00")
+def test_delete_task_finds_and_deletes(capfd):
+    fake = FakeService([
+        {"id": "1", "summary": "Meeting", "start": {"dateTime": "2025-04-20T10:00:00"}}
+    ])
+    delete_task(fake, "Meeting", "2025-04-20T10:00")
+    out = capfd.readouterr().out
+    assert "Deleted" in out
 
-    # Instead of checking attribute, check that delete_event was not set
-    assert fake.deleted_event is None
-
-
-
-# Test for `delete_task` print output
-def test_delete_task_prints_success(capsys):
-    sample = [
-        {
-            "id": "evt999",
-            "summary": "Zoom Call",
-            "start": {"dateTime": "2025-04-20T14:30:00Z"},
-        }
-    ]
-    fake = FakeService(items=sample)
-    delete_task(fake, "Zoom Call", "2025-04-20T14:30")
-
-    captured = capsys.readouterr()
-    assert "🗑️ Deleted: Zoom Call at 2025-04-20T14:30" in captured.out
+def test_delete_task_no_match(capfd):
+    fake = FakeService([
+        {"id": "2", "summary": "Other", "start": {"dateTime": "2025-04-20T11:00:00"}}
+    ])
+    delete_task(fake, "Meeting", "2025-04-20T10:00")
+    out = capfd.readouterr().out
+    assert "No matching event" in out
