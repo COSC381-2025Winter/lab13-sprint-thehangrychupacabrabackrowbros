@@ -163,7 +163,12 @@ def submit_task():
     if not task_name.strip():
         messagebox.showerror("Missing Task", "Task name cannot be empty.")
         return
-    formatted_duration = f"{duration} hour\t" if duration == "1" else f"{duration} hours\t" if duration else None
+    if duration == "1":
+        formatted_duration = f"{duration} hour\t"
+    elif duration:
+        formatted_duration = f"{duration} hours\t"
+    else:
+        formatted_duration = None
     all_tasks.append({
         "date": parsed_date,
         "time": parsed_time,
