@@ -2,6 +2,7 @@ import os
 import pickle  # for token storage
 import json
 from datetime import datetime
+from datetime import datetime
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
@@ -82,6 +83,41 @@ def delete_task(service, title: str, start_time: str, max_results: int = 50):
             return
 
     print(f"❌ No matching event found for deletion: {title} at {start_time}")
+
+def backup_calendar_to_json(service, out_path="task_data.json", calendar_id: str = CALENDAR_ID):
+    events = list_all_events(service, calendar_id=calendar_id)
+    by_date = {}
+
+    for e in events:
+        summary = e.get("summary")
+        start = e.get("start", {}).get("dateTime")
+        end = e.get("end", {}).get("dateTime")
+        if not summary or not start:
+            continue
+
+        date = start[:10]  # "YYYY-MM-DD"
+        time = start[11:16]  # "HH:MM"
+        duration = None
+
+        if start and end:
+            start_dt = datetime.fromisoformat(start)
+            end_dt = datetime.fromisoformat(end)
+            hours = (end_dt - start_dt).total_seconds() / 3600
+            duration = f"{hours:g} hours\t" if hours != 1 else "1 hour\t"
+
+        event_obj = {
+            "task": summary,
+            "time": time,
+            "duration": duration
+        }
+
+        if date not in by_date:
+            by_date[date] = []
+        by_date[date].append(event_obj)
+
+    with open(out_path, "w") as f:
+        json.dump(by_date, f, indent=2)
+    print(f"📝 Backup saved to {out_path}")
 
 def backup_calendar_to_json(service, out_path="task_data.json", calendar_id: str = CALENDAR_ID):
     events = list_all_events(service, calendar_id=calendar_id)

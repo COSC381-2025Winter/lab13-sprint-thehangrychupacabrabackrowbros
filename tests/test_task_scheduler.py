@@ -12,6 +12,13 @@ import task_scheduler_gui as gui
 
 DATA_FILE = os.environ["DATA_FILE"]
 
+from unittest.mock import patch
+@pytest.fixture(autouse=True)
+def no_gui(monkeypatch):
+    # Prevent CTk from trying to open a window
+    monkeypatch.setattr("customtkinter.CTk", lambda *a, **kw: None)
+
+
 @pytest.fixture(scope="function")
 def setup_data_file():
     open(DATA_FILE, "w").close()

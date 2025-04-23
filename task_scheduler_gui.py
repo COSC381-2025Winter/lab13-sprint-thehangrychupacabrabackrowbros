@@ -7,7 +7,7 @@ from calendar_utils import create_event, delete_task, get_calendar_service, list
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-app = ctk.CTk()
+
 app.title("Google Calendar Integrated Task Scheduler")
 app.minsize(600, 500)
 custom_font = ("Comic Sans MS", 16)
