@@ -1,91 +1,44 @@
 import os
-import pickle  # for token storage
-import datetime
+import pickle
 import json
+from datetime import datetime
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 
-# If modifying these scopes, delete the file token.pickle.
-SCOPES = ['https://www.googleapis.com/auth/calendar.events']
+SCOPES = [
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/calendar'
+]
 
-def add_tasks_from_json(service, json_path="task_data.json", max_results=50):
-    """
-    Loads tasks from a JSON file and inserts only those not already in the calendar.
-    """
-    # Load tasks from the JSON file
-    with open(json_path, 'r') as file:
-        tasks = json.load(file)
-
-    # Fetch current events from calendar
-    existing_events = list_upcoming_events(service, max_results=max_results)
-
-    # Normalize existing events for easier comparison
-    existing_lookup = set(
-        (e['summary'], e['start']['dateTime'][:16])  # e.g., ("Meeting", "2025-04-20T10:00")
-        for e in existing_events if 'summary' in e and 'start' in e and 'dateTime' in e['start']
-    )
-
-    for task in tasks:
-        # Format the task into an event body
-        event = {
-            'summary': task['title'],
-            'description': task.get('description', ''),
-            'start': {
-                'dateTime': task['start'],  # Must be in ISO 8601 format
-                'timeZone': task.get('timeZone', 'America/New_York'),
-            },
-            'end': {
-                'dateTime': task['end'],
-                'timeZone': task.get('timeZone', 'America/New_York'),
-            },
-        }
-
-        task_key = (event['summary'], event['start']['dateTime'][:16])
-
-        # Only create event if it’s not already on the calendar
-        if task_key not in existing_lookup:
-            create_event(service, event)
-            print(f"✅ Created: {event['summary']} at {event['start']['dateTime']}")
-        else:
-            print(f"⚠️ Skipped duplicate: {event['summary']} at {event['start']['dateTime']}")
+CALENDAR_ID = 'c_cd145b86092760e679df8ba1915278a36b426ac2db11dff5e16e54c4bb5013ab@group.calendar.google.com'
 
 def get_calendar_service():
-    """Authenticate via OAuth2 and return a Google Calendar service object."""
     creds = None
     token_path = 'token.pickle'
     creds_path = 'credentials.json'
 
-    # Load existing credentials
     if os.path.exists(token_path):
         with open(token_path, 'rb') as token_file:
             creds = pickle.load(token_file)
 
-    # If no valid credentials, perform the OAuth2 flow
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
             creds = flow.run_local_server(port=0)
-        # Save the credentials for the next run
         with open(token_path, 'wb') as token_file:
             pickle.dump(creds, token_file)
 
-    # Build the Calendar API service
     service = build('calendar', 'v3', credentials=creds)
     return service
 
-def list_upcoming_events(service, max_results: int = 10):
-    """
-    Returns the next `max_results` events on the user's primary calendar.
-    """
-    now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC
+def list_all_events(service, max_results: int = 250, calendar_id: str = CALENDAR_ID):
     events_result = (
         service.events()
                .list(
-                   calendarId='primary',
-                   timeMin=now,
+                   calendarId=calendar_id,
                    maxResults=max_results,
                    singleEvents=True,
                    orderBy='startTime'
@@ -94,18 +47,63 @@ def list_upcoming_events(service, max_results: int = 10):
     )
     return events_result.get('items', [])
 
-def create_event(service, event_body: dict):
-    """
-    Creates an event on the user's primary calendar.
-    `event_body` must follow the Google Calendar API spec.
-    """
+def create_event(service, event_body: dict, calendar_id: str = CALENDAR_ID):
     return service.events().insert(
-        calendarId='primary',
+        calendarId=calendar_id,
         body=event_body
     ).execute()
 
-# Quick smoke test when run as a script
-if __name__ == '__main__':
-    service = get_calendar_service()
-    add_tasks_from_json(service)
-    print(f"✅ Google Calendar service created: {service}")
+def delete_task(service, title: str, start_time: str, max_results: int = 250, calendar_id: str = CALENDAR_ID):
+    existing_events = list_all_events(service, max_results=max_results, calendar_id=calendar_id)
+
+    print("\n--- Existing Events ---")
+    for e in existing_events:
+        print(f"{e.get('summary', '')} @ {e.get('start', {}).get('dateTime', '')}")
+    print("-----------------------\n")
+
+    for event in existing_events:
+        event_title = event.get('summary', '')
+        event_start = event.get('start', {}).get('dateTime', '')
+
+        if event_title == title and event_start[:16] == start_time[:16]:
+            event_id = event['id']
+            service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
+            print(f"🗑️ Deleted: {title} at {start_time}")
+            return
+
+    print(f"❌ No matching event found for deletion: {title} at {start_time}")
+
+def backup_calendar_to_json(service, out_path="task_data.json", calendar_id: str = CALENDAR_ID):
+    events = list_all_events(service, calendar_id=calendar_id)
+    by_date = {}
+
+    for e in events:
+        summary = e.get("summary")
+        start = e.get("start", {}).get("dateTime")
+        end = e.get("end", {}).get("dateTime")
+        if not summary or not start:
+            continue
+
+        date = start[:10]  # "YYYY-MM-DD"
+        time = start[11:16]  # "HH:MM"
+        duration = None
+
+        if start and end:
+            start_dt = datetime.fromisoformat(start)
+            end_dt = datetime.fromisoformat(end)
+            hours = (end_dt - start_dt).total_seconds() / 3600
+            duration = f"{hours:g} hours\t" if hours != 1 else "1 hour\t"
+
+        event_obj = {
+            "task": summary,
+            "time": time,
+            "duration": duration
+        }
+
+        if date not in by_date:
+            by_date[date] = []
+        by_date[date].append(event_obj)
+
+    with open(out_path, "w") as f:
+        json.dump(by_date, f, indent=2)
+    print(f"📝 Backup saved to {out_path}")
