@@ -2,6 +2,8 @@
 __pycache__/
 *.py[cod]
 *.pyo
+tests/__pycache__/*
+tests/pytest_cache/
 
 # macOS system files
 .DS_Store
