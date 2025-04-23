@@ -1,1 +1,24 @@
-{}
+{
+  "2025-04-20": [
+    {
+      "time": "06:00",
+      "duration": "1.0 hours\t",
+      "task": "Write your task or describe it here. test"
+    },
+    {
+      "time": "09:10",
+      "duration": "1.5 hours\t",
+      "task": "get groceries"
+    },
+    {
+      "time": "11:45",
+      "duration": "1.5 hours\t",
+      "task": "do dishes"
+    },
+    {
+      "time": "17:10",
+      "duration": "0.5 hours\t",
+      "task": "h"
+    }
+  ]
+}

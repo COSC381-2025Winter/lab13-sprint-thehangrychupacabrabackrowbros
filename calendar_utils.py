@@ -39,6 +39,7 @@ def list_all_events(service, max_results: int = 250, calendar_id: str = CALENDAR
         service.events()
                .list(
                    calendarId=calendar_id,
+                   calendarId=calendar_id,
                    maxResults=max_results,
                    singleEvents=True,
                    orderBy='startTime'
@@ -48,7 +49,9 @@ def list_all_events(service, max_results: int = 250, calendar_id: str = CALENDAR
     return events_result.get('items', [])
 
 def create_event(service, event_body: dict, calendar_id: str = CALENDAR_ID):
+def create_event(service, event_body: dict, calendar_id: str = CALENDAR_ID):
     return service.events().insert(
+        calendarId=calendar_id,
         calendarId=calendar_id,
         body=event_body
     ).execute()

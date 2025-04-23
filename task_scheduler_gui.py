@@ -3,6 +3,9 @@ import os
 import customtkinter as ctk
 from datetime import datetime
 import platform
+from tkinter import messagebox  # ✅ add this
+from calendar_utils import create_event, delete_task
+
 
 # Appearance
 ctk.set_appearance_mode("Dark")
@@ -13,7 +16,7 @@ app.title("Google Calendar Integrated Task Scheduler")
 app.minsize(600, 500)
 
 custom_font = ("Comic Sans MS", 16)
-DATA_FILE = os.environ.get("DATA_FILE", "task_data.json")
+# DATA_FILE = os.environ.get("DATA_FILE", "task_data.json")
 all_tasks = []
 checkbox_refs = []
 
@@ -65,16 +68,33 @@ def clear_completed_tasks():
     global all_tasks, checkbox_refs
     remaining_tasks = []
     new_refs = []
+
+    try:
+        from calendar_utils import get_calendar_service
+        service = get_calendar_service()
+    except Exception as e:
+        print("❌ Could not load calendar service:", e)
+        service = None
+
     for (task, var, frame) in checkbox_refs:
         if var.get() == 0:
             remaining_tasks.append(task)
             new_refs.append((task, var, frame))
         else:
             frame.destroy()
+            # --- ✅ Google Calendar Deletion ---
+            if service:
+                start_time = task['time'].isoformat()[:16] if task['time'] else task['date'].isoformat()[:16]
+                try:
+                    delete_task(service, task['task_name'], start_time)
+                except Exception as e:
+                    print(f"❌ Could not delete {task['task_name']}:", e)
+
     all_tasks = remaining_tasks
     checkbox_refs = new_refs
     save_tasks()
     sort_tasks()
+
 
 def sort_tasks():
     for widget in task_list_container.winfo_children():
@@ -150,6 +170,33 @@ def submit_task():
         "duration": formatted_duration,
         "task_name": task_name.strip()
     })
+
+    # --- ✅ Google Calendar Integration ---
+    if parsed_time and duration:
+        end_time = parsed_time.replace(hour=parsed_time.hour + int(float(duration)))
+    else:
+        end_time = parsed_time or parsed_date
+
+    event_body = {
+        "summary": task_name.strip(),
+        "start": {
+            "dateTime": parsed_time.isoformat() if parsed_time else parsed_date.isoformat(),
+            "timeZone": "America/New_York"
+        },
+        "end": {
+            "dateTime": end_time.isoformat(),
+            "timeZone": "America/New_York"
+        }
+    }
+
+    try:
+        from calendar_utils import get_calendar_service
+        service = get_calendar_service()
+        create_event(service, event_body)
+        print("✅ Event added to Google Calendar")
+    except Exception as e:
+        print("❌ Failed to add event to calendar:", e)
+
     year_entry.delete(0, ctk.END)
     task_entry.delete("1.0", ctk.END)
     set_task_hint()
@@ -159,8 +206,8 @@ def submit_task():
     sort_tasks()
     check_submit_ready()
 
-# --- Adjusted save_tasks function to sort dates chronologically ---
 def save_tasks():
+    data_file = os.environ.get("DATA_FILE", "task_data.json")
     grouped = {}
     for task in all_tasks:
         date_key = task['date'].strftime("%Y-%m-%d")
@@ -173,17 +220,18 @@ def save_tasks():
 
     sorted_grouped = dict(sorted(grouped.items(), key=lambda x: datetime.strptime(x[0], "%Y-%m-%d")))
 
-    with open(DATA_FILE, "w") as f:
+    with open(data_file, "w") as f:
         json.dump(sorted_grouped, f, indent=2)
 
-# --- Adjusted load_tasks function to handle empty file gracefully ---
+
 def load_tasks():
-    if not os.path.exists(DATA_FILE):
+    data_file = os.environ.get("DATA_FILE", "task_data.json")
+    if not os.path.exists(data_file):
         return
     try:
-        if os.path.getsize(DATA_FILE) == 0:
+        if os.path.getsize(data_file) == 0:
             return
-        with open(DATA_FILE, "r") as f:
+        with open(data_file, "r") as f:
             grouped = json.load(f)
             for date_key in grouped:
                 date_obj = datetime.strptime(date_key, "%Y-%m-%d")
@@ -198,7 +246,8 @@ def load_tasks():
     except json.JSONDecodeError:
         print("Empty or invalid JSON file detected, starting fresh.")
     except Exception as e:
-        print("Error loading task_data.json:", e)
+        print("Error loading task data:", e)
+
 
 # --- UI Layout ---
 entry_wrapper = ctk.CTkFrame(app)
