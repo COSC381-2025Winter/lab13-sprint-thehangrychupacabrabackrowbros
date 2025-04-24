@@ -1,7 +1,7 @@
 import os
-import pickle
+import pickle  # for token storage
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
@@ -14,31 +14,38 @@ SCOPES = [
 CALENDAR_ID = 'c_cd145b86092760e679df8ba1915278a36b426ac2db11dff5e16e54c4bb5013ab@group.calendar.google.com'
 
 def get_calendar_service():
+    """Authenticate via OAuth2 and return a Google Calendar service object."""
     creds = None
     token_path = 'token.pickle'
     creds_path = 'credentials.json'
 
+    # Load existing credentials
     if os.path.exists(token_path):
         with open(token_path, 'rb') as token_file:
             creds = pickle.load(token_file)
 
+    # If no valid credentials, perform the OAuth2 flow
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
             creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
         with open(token_path, 'wb') as token_file:
             pickle.dump(creds, token_file)
 
+    # Build the Calendar API service
     service = build('calendar', 'v3', credentials=creds)
     return service
 
 def list_all_events(service, max_results: int = 250, calendar_id: str = CALENDAR_ID):
+    now = datetime.now(timezone.utc).isoformat() + 'Z'
     events_result = (
         service.events()
                .list(
                    calendarId=calendar_id,
+                   timeMin=now,
                    maxResults=max_results,
                    singleEvents=True,
                    orderBy='startTime'
@@ -53,18 +60,20 @@ def create_event(service, event_body: dict, calendar_id: str = CALENDAR_ID):
         body=event_body
     ).execute()
 
-def delete_task(service, title: str, start_time: str, max_results: int = 250, calendar_id: str = CALENDAR_ID):
-    existing_events = list_all_events(service, max_results=max_results, calendar_id=calendar_id)
 
-    print("\n--- Existing Events ---")
-    for e in existing_events:
-        print(f"{e.get('summary', '')} @ {e.get('start', {}).get('dateTime', '')}")
-    print("-----------------------\n")
+def delete_task(service, title: str, start_time: str, max_results: int = 50, calendar_id: str = CALENDAR_ID):
+    """
+    Deletes an event from the specified calendar matching the given title and start time.
+    `start_time` must be in ISO 8601 format (e.g., "2025-04-20T10:00").
+    """
+    # Fetch current events from the correct calendar
+    existing_events = list_all_events(service, max_results=max_results, calendar_id=calendar_id)
 
     for event in existing_events:
         event_title = event.get('summary', '')
         event_start = event.get('start', {}).get('dateTime', '')
 
+        # Compare both title and starting time (to the minute)
         if event_title == title and event_start[:16] == start_time[:16]:
             event_id = event['id']
             service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
@@ -72,6 +81,7 @@ def delete_task(service, title: str, start_time: str, max_results: int = 250, ca
             return
 
     print(f"❌ No matching event found for deletion: {title} at {start_time}")
+
 
 def backup_calendar_to_json(service, out_path="task_data.json", calendar_id: str = CALENDAR_ID):
     events = list_all_events(service, calendar_id=calendar_id)

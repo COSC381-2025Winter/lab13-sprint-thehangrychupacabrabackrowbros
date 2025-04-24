@@ -1,24 +1,20 @@
-import json
-import os
 import customtkinter as ctk
-from datetime import datetime
-import platform
-from tkinter import messagebox  # ✅ add this
-from calendar_utils import create_event, delete_task
+from datetime import datetime, time as dtime, timedelta
+from tkinter import messagebox
+from calendar_utils import create_event, delete_task, get_calendar_service, list_all_events, backup_calendar_to_json
 
-
-# Appearance
+# ✅ Moved to the top so vcmd doesn't fail
+app = ctk.CTk()
+app.title("Google Calendar Integrated Task Scheduler")
+app.minsize(600, 500)
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-
-app.title("Google Calendar Integrated Task Scheduler")
-app.minsize(600, 500)
-
 custom_font = ("Comic Sans MS", 16)
-# DATA_FILE = os.environ.get("DATA_FILE", "task_data.json")
+
 all_tasks = []
 checkbox_refs = []
+task_hint = "Write your task or describe it here."
 
 def numeric_only(char):
     return char.isdigit()
@@ -70,7 +66,6 @@ def clear_completed_tasks():
     new_refs = []
 
     try:
-        from calendar_utils import get_calendar_service
         service = get_calendar_service()
     except Exception as e:
         print("❌ Could not load calendar service:", e)
@@ -82,37 +77,44 @@ def clear_completed_tasks():
             new_refs.append((task, var, frame))
         else:
             frame.destroy()
-            # --- ✅ Google Calendar Deletion ---
             if service:
-                start_time = task['time'].isoformat()[:16] if task['time'] else task['date'].isoformat()[:16]
+                start_time = task['start_datetime'].isoformat()[:16]
                 try:
                     delete_task(service, task['task_name'], start_time)
                 except Exception as e:
                     print(f"❌ Could not delete {task['task_name']}:", e)
 
-    all_tasks = remaining_tasks
-    checkbox_refs = new_refs
-    save_tasks()
+    all_tasks.clear()
+    all_tasks.extend(remaining_tasks)
+    checkbox_refs.clear()
+    checkbox_refs.extend(new_refs)
     sort_tasks()
+    messagebox.showinfo("Tasks Cleared", "Completed tasks have been removed and deleted from Google Calendar.")
+
+    try:
+        backup_calendar_to_json(service, out_path="task_data.json")
+    except Exception as e:
+        print("⚠️ Backup after clearing tasks failed:", e)
+
 
 
 def sort_tasks():
     for widget in task_list_container.winfo_children():
         widget.destroy()
     checkbox_refs.clear()
+    
+    if not all_tasks:
+        empty_label = ctk.CTkLabel(task_list_container, text="➕ Add a task and it will be shown here.", font=custom_font, text_color="gray")
+        empty_label.pack(pady=30)
+        return
 
     grouped = {}
     for task in sorted(all_tasks, key=lambda t: (t['date'], t['time'] or datetime.min)):
-        try:
-            date_key = task['date'].strftime("%-m/%-d/%y")
-        except ValueError:
-            date_key = task['date'].strftime("%#m/%#d/%y")
-        if date_key not in grouped:
-            grouped[date_key] = []
-        grouped[date_key].append(task)
+        date_key = task['date'].strftime("%-m/%-d/%y") if hasattr(task['date'], 'strftime') else "Unknown"
+        grouped.setdefault(date_key, []).append(task)
 
     for date_key, tasks in grouped.items():
-        ctk.CTkLabel(task_list_container, text=f"📅 {date_key}", font=custom_font).pack(anchor='w', padx=10, pady=(10, 0))
+        ctk.CTkLabel(task_list_container, text=f"\U0001F4C5 {date_key}", font=custom_font).pack(anchor='w', padx=10, pady=(10, 0))
         for task in tasks:
             task_frame = ctk.CTkFrame(task_list_container, fg_color="transparent")
             task_frame.pack(fill='x', padx=30, pady=2, anchor='w')
@@ -123,10 +125,7 @@ def sort_tasks():
 
             label_parts = []
             if task['time']:
-                try:
-                    time_str = task['time'].strftime("%-I:%M %p")
-                except ValueError:
-                    time_str = task['time'].strftime("%#I:%M %p")
+                time_str = task['time'].strftime("%-I:%M %p") if hasattr(task['time'], 'strftime') else ""
                 label_parts.append(time_str)
             if task['duration']:
                 label_parts.append(task['duration'])
@@ -137,12 +136,6 @@ def sort_tasks():
             task_label.pack(side='left', padx=5, fill="x", expand=True)
 
             checkbox_refs.append((task, var, task_frame))
-
-def platform_strftime(date_obj, unix_format, windows_format):
-    try:
-        return date_obj.strftime(unix_format)
-    except ValueError:
-        return date_obj.strftime(windows_format)
 
 def submit_task():
     month = month_var.get()
@@ -155,103 +148,118 @@ def submit_task():
     task_name = task_entry.get("1.0", "end").strip()
     if task_name == task_hint:
         task_name = ""
+    if not task_name.strip():
+        messagebox.showerror("Missing Task", "Task name cannot be empty.")
+        return
     parsed_date = parse_date(month, day, year)
     parsed_time = format_time(hour, minute, period) if hour and minute else None
     if not parsed_date:
         messagebox.showerror("Invalid Date", "Please enter a valid date.")
         return
-    if not task_name.strip():
-        messagebox.showerror("Missing Task", "Task name cannot be empty.")
-        return
-    if duration == "1":
-        formatted_duration = f"{duration} hour\t"
-    elif duration:
-        formatted_duration = f"{duration} hours\t"
+    formatted_duration = f"{duration} hour\t" if duration == "1" else f"{duration} hours\t" if duration else None
+
+    combined_start = datetime.combine(parsed_date.date(), parsed_time.time() if parsed_time else dtime(0, 0))
+    if parsed_time and duration:
+        try:
+            duration_minutes = int(float(duration) * 60)
+        except ValueError:
+            messagebox.showerror("Invalid Duration", "Please enter a valid numeric duration.")
+            return
+        combined_end = combined_start + timedelta(minutes=duration_minutes)
     else:
-        formatted_duration = None
+        combined_end = combined_start
+
     all_tasks.append({
         "date": parsed_date,
         "time": parsed_time,
         "duration": formatted_duration,
-        "task_name": task_name.strip()
+        "task_name": task_name.strip(),
+        "start_datetime": combined_start
     })
-
-    # --- ✅ Google Calendar Integration ---
-    if parsed_time and duration:
-        end_time = parsed_time.replace(hour=parsed_time.hour + int(float(duration)))
-    else:
-        end_time = parsed_time or parsed_date
 
     event_body = {
         "summary": task_name.strip(),
         "start": {
-            "dateTime": parsed_time.isoformat() if parsed_time else parsed_date.isoformat(),
+            "dateTime": combined_start.isoformat(),
             "timeZone": "America/New_York"
         },
         "end": {
-            "dateTime": end_time.isoformat(),
+            "dateTime": combined_end.isoformat(),
             "timeZone": "America/New_York"
         }
     }
 
     try:
-        from calendar_utils import get_calendar_service
         service = get_calendar_service()
         create_event(service, event_body)
-        print("✅ Event added to Google Calendar")
+
+        # ✅ Immediately back up the calendar after adding a task
+        backup_calendar_to_json(service, out_path="task_data.json")
+
+        messagebox.showinfo("Task Added", "Your task was added to Google Calendar.")
+        
+        # Reset task entry box
+        task_entry.delete("1.0", "end")
+        task_entry.insert("1.0", task_hint)
+        task_entry.configure(text_color="gray")
+        check_submit_ready()
+
+        # Reset dropdowns and year entry
+        month_var.set("")
+        day_var.set("")
+        hour_var.set("")
+        minute_var.set("")
+        am_pm_var.set("AM")
+        duration_var.set("")
+        year_entry.delete(0, "end")
+
     except Exception as e:
-        print("❌ Failed to add event to calendar:", e)
-
-    year_entry.delete(0, ctk.END)
-    task_entry.delete("1.0", ctk.END)
-    set_task_hint()
-    for var in [month_var, day_var, hour_var, minute_var, duration_var]:
-        var.set("")
-    save_tasks()
-    sort_tasks()
-    check_submit_ready()
-
-def save_tasks():
-    data_file = os.environ.get("DATA_FILE", "task_data.json")
-    grouped = {}
-    for task in all_tasks:
-        date_key = task['date'].strftime("%Y-%m-%d")
-        time_str = task['time'].strftime("%H:%M") if task['time'] else None
-        entry = {"time": time_str, "duration": task['duration'], "task": task['task_name']}
-        grouped.setdefault(date_key, []).append(entry)
-
-    for task_list in grouped.values():
-        task_list.sort(key=lambda t: t['time'] or "")
-
-    sorted_grouped = dict(sorted(grouped.items(), key=lambda x: datetime.strptime(x[0], "%Y-%m-%d")))
-
-    with open(data_file, "w") as f:
-        json.dump(sorted_grouped, f, indent=2)
+        messagebox.showerror("Calendar Error", f"Failed to add task:\n{e}")
 
 
-def load_tasks():
-    data_file = os.environ.get("DATA_FILE", "task_data.json")
-    if not os.path.exists(data_file):
-        return
+def fetch_calendar_tasks():
+    tasks = []
     try:
-        if os.path.getsize(data_file) == 0:
-            return
-        with open(data_file, "r") as f:
-            grouped = json.load(f)
-            for date_key in grouped:
-                date_obj = datetime.strptime(date_key, "%Y-%m-%d")
-                for entry in grouped[date_key]:
-                    time_obj = datetime.strptime(entry['time'], "%H:%M") if entry['time'] else None
-                    all_tasks.append({
-                        "date": date_obj,
-                        "time": time_obj,
-                        "duration": entry.get('duration'),
-                        "task_name": entry.get('task')
-                    })
-    except json.JSONDecodeError:
-        print("Empty or invalid JSON file detected, starting fresh.")
+        service = get_calendar_service()
+        events = list_all_events(service)
+        for e in events:
+            if not e.get('summary') or 'start' not in e or 'dateTime' not in e['start']:
+                continue
+
+            start_str = e['start']['dateTime']
+            start_dt = datetime.fromisoformat(start_str)
+            duration = None
+            if 'end' in e and 'dateTime' in e['end']:
+                end_dt = datetime.fromisoformat(e['end']['dateTime'])
+                delta = end_dt - start_dt
+                hours = delta.total_seconds() / 3600
+                duration = f"{hours:g} hours\t" if hours != 1 else "1 hour\t"
+            tasks.append({
+                "date": start_dt,
+                "time": start_dt,
+                "duration": duration,
+                "task_name": e['summary'],
+                "start_datetime": start_dt
+            })
     except Exception as e:
-        print("Error loading task data:", e)
+        print("Failed to fetch calendar tasks:", e)
+    return tasks
+
+def refresh_task_list_periodically():
+    global all_tasks
+    if not app.winfo_exists():
+        return
+
+    try:
+        updated_tasks = fetch_calendar_tasks()
+        if updated_tasks != all_tasks:
+            all_tasks = updated_tasks
+            sort_tasks()
+    except Exception as e:
+        print("⚠️ Error during task refresh:", e)
+
+    app.after(1000, refresh_task_list_periodically)
+
 
 
 # --- UI Layout ---
@@ -289,7 +297,6 @@ task_label = ctk.CTkLabel(entry_wrapper, text="Task:")
 task_label.pack(anchor="w", padx=10)
 task_entry = ctk.CTkTextbox(entry_wrapper, height=60, width=400)
 task_entry.pack(anchor="center", padx=10, pady=(5,10))
-task_hint = "Write your task or describe it here."
 task_entry.insert("1.0", task_hint)
 task_entry.configure(text_color="gray")
 task_entry.bind("<FocusIn>", clear_task_hint)
@@ -308,8 +315,8 @@ task_scroll.pack(fill='both', expand=True, padx=5, pady=(0,10))
 task_list_container = task_scroll
 
 if __name__ == "__main__":
-    app = ctk.CTk()
-    load_tasks()
+    all_tasks = fetch_calendar_tasks()
     sort_tasks()
+    refresh_task_list_periodically()
     app.after(1, lambda: app.attributes('-topmost', True))
     app.mainloop()
