@@ -52,7 +52,7 @@ def test_refresh_task_list_periodically_runs_without_crashing(mock_fetch):
     mock_fetch.return_value = []
     gui.app.after(1, lambda: gui.app.quit())  # Quit quickly after run
     gui.refresh_task_list_periodically()
-    assert True  # If no error, we're good
+    assert mock_fetch.called  # Ensure the fetch_calendar_tasks function was called
 
 from unittest.mock import patch, MagicMock
 from datetime import datetime
