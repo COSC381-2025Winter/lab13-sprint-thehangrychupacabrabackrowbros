@@ -1,8 +1,7 @@
 import os
 import pickle  # for token storage
 import json
-from datetime import datetime
-from datetime import datetime
+from datetime import datetime, timezone
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
@@ -41,10 +40,11 @@ def get_calendar_service():
     return service
 
 def list_all_events(service, max_results: int = 250, calendar_id: str = CALENDAR_ID):
+    now = datetime.now(timezone.utc).isoformat() + 'Z'
     events_result = (
         service.events()
                .list(
-                   calendarId='primary',
+                   calendarId=calendar_id,
                    timeMin=now,
                    maxResults=max_results,
                    singleEvents=True,
@@ -54,70 +54,34 @@ def list_all_events(service, max_results: int = 250, calendar_id: str = CALENDAR
     )
     return events_result.get('items', [])
 
-def create_event(service, event_body: dict):
-    """
-    Creates an event on the user's primary calendar.
-    `event_body` must follow the Google Calendar API spec.
-    """
+def create_event(service, event_body: dict, calendar_id: str = CALENDAR_ID):
     return service.events().insert(
-        calendarId='primary',
+        calendarId=calendar_id,
         body=event_body
     ).execute()
 
-def delete_task(service, title: str, start_time: str, max_results: int = 50):
+
+def delete_task(service, title: str, start_time: str, max_results: int = 50, calendar_id: str = CALENDAR_ID):
     """
-    Deletes an event from the calendar matching the given title and start time.
+    Deletes an event from the specified calendar matching the given title and start time.
     `start_time` must be in ISO 8601 format (e.g., "2025-04-20T10:00").
     """
-    # Fetch current events
-    existing_events = list_upcoming_events(service, max_results=max_results)
+    # Fetch current events from the correct calendar
+    existing_events = list_all_events(service, max_results=max_results, calendar_id=calendar_id)
 
     for event in existing_events:
         event_title = event.get('summary', '')
         event_start = event.get('start', {}).get('dateTime', '')
 
+        # Compare both title and starting time (to the minute)
         if event_title == title and event_start[:16] == start_time[:16]:
             event_id = event['id']
-            service.events().delete(calendarId='primary', eventId=event_id).execute()
+            service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
             print(f"🗑️ Deleted: {title} at {start_time}")
             return
 
     print(f"❌ No matching event found for deletion: {title} at {start_time}")
 
-def backup_calendar_to_json(service, out_path="task_data.json", calendar_id: str = CALENDAR_ID):
-    events = list_all_events(service, calendar_id=calendar_id)
-    by_date = {}
-
-    for e in events:
-        summary = e.get("summary")
-        start = e.get("start", {}).get("dateTime")
-        end = e.get("end", {}).get("dateTime")
-        if not summary or not start:
-            continue
-
-        date = start[:10]  # "YYYY-MM-DD"
-        time = start[11:16]  # "HH:MM"
-        duration = None
-
-        if start and end:
-            start_dt = datetime.fromisoformat(start)
-            end_dt = datetime.fromisoformat(end)
-            hours = (end_dt - start_dt).total_seconds() / 3600
-            duration = f"{hours:g} hours\t" if hours != 1 else "1 hour\t"
-
-        event_obj = {
-            "task": summary,
-            "time": time,
-            "duration": duration
-        }
-
-        if date not in by_date:
-            by_date[date] = []
-        by_date[date].append(event_obj)
-
-    with open(out_path, "w") as f:
-        json.dump(by_date, f, indent=2)
-    print(f"📝 Backup saved to {out_path}")
 
 def backup_calendar_to_json(service, out_path="task_data.json", calendar_id: str = CALENDAR_ID):
     events = list_all_events(service, calendar_id=calendar_id)

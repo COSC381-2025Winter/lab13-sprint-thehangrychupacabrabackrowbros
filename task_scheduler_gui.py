@@ -1,15 +1,15 @@
 import customtkinter as ctk
 from datetime import datetime, time as dtime, timedelta
 from tkinter import messagebox
-from calendar_utils import create_event, delete_task, get_calendar_service, list_all_events
+from calendar_utils import create_event, delete_task, get_calendar_service, list_all_events, backup_calendar_to_json
 
-# GUI setup
+# ✅ Moved to the top so vcmd doesn't fail
+app = ctk.CTk()
+app.title("Google Calendar Integrated Task Scheduler")
+app.minsize(600, 500)
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-
-app.title("Google Calendar Integrated Task Scheduler")
-app.minsize(600, 500)
 custom_font = ("Comic Sans MS", 16)
 
 all_tasks = []
@@ -90,6 +90,12 @@ def clear_completed_tasks():
     checkbox_refs.extend(new_refs)
     sort_tasks()
     messagebox.showinfo("Tasks Cleared", "Completed tasks have been removed and deleted from Google Calendar.")
+
+    try:
+        backup_calendar_to_json(service, out_path="task_data.json")
+    except Exception as e:
+        print("⚠️ Backup after clearing tasks failed:", e)
+
 
 
 def sort_tasks():
@@ -182,6 +188,10 @@ def submit_task():
     try:
         service = get_calendar_service()
         create_event(service, event_body)
+
+        # ✅ Immediately back up the calendar after adding a task
+        backup_calendar_to_json(service, out_path="task_data.json")
+
         messagebox.showinfo("Task Added", "Your task was added to Google Calendar.")
         
         # Reset task entry box
@@ -201,6 +211,7 @@ def submit_task():
 
     except Exception as e:
         messagebox.showerror("Calendar Error", f"Failed to add task:\n{e}")
+
 
 def fetch_calendar_tasks():
     tasks = []
@@ -229,13 +240,22 @@ def fetch_calendar_tasks():
         print("Failed to fetch calendar tasks:", e)
     return tasks
 
-def refresh_task_list_periodically(interval=1000):
+def refresh_task_list_periodically():
     global all_tasks
-    updated_tasks = fetch_calendar_tasks()
-    if updated_tasks != all_tasks:
-        all_tasks = updated_tasks
-        sort_tasks()
-    app.after(interval, refresh_task_list_periodically)
+    if not app.winfo_exists():
+        return
+
+    try:
+        updated_tasks = fetch_calendar_tasks()
+        if updated_tasks != all_tasks:
+            all_tasks = updated_tasks
+            sort_tasks()
+    except Exception as e:
+        print("⚠️ Error during task refresh:", e)
+
+    app.after(1000, refresh_task_list_periodically)
+
+
 
 # --- UI Layout ---
 entry_wrapper = ctk.CTkFrame(app)
