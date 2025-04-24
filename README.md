@@ -63,7 +63,7 @@ Upload to TestPyPI:
 You'll be prompted to enter your TestPyPI token. Create one at: [TestPyPI Account Management](https://test.pypi.org/manage/account/)
 
 ## Project Structure
-
+```txt
 task_scheduler_gui.py            # Main GUI application
 calendar_utils.py                # Google Calendar integration helpers
 tests/                           # Unit tests
@@ -72,7 +72,7 @@ task_data.json                   # Local task backup
 requirements.txt                 # Dependencies
 pyproject.toml                   # Build settings
 README.md                        # You're here!
-
+```
 ## Lab 13 Requirements Checklist
 
 - [x] GitHub Project Board with linked Issues and Pull Requests
