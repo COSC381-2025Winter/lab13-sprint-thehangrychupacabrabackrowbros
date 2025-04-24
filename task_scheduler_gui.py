@@ -148,19 +148,23 @@ def submit_task():
     task_name = task_entry.get("1.0", "end").strip()
     if task_name == task_hint:
         task_name = ""
+    if not task_name.strip():
+        messagebox.showerror("Missing Task", "Task name cannot be empty.")
+        return
     parsed_date = parse_date(month, day, year)
     parsed_time = format_time(hour, minute, period) if hour and minute else None
     if not parsed_date:
         messagebox.showerror("Invalid Date", "Please enter a valid date.")
         return
-    if not task_name.strip():
-        messagebox.showerror("Missing Task", "Task name cannot be empty.")
-        return
     formatted_duration = f"{duration} hour\t" if duration == "1" else f"{duration} hours\t" if duration else None
 
     combined_start = datetime.combine(parsed_date.date(), parsed_time.time() if parsed_time else dtime(0, 0))
     if parsed_time and duration:
-        duration_minutes = int(float(duration) * 60)
+        try:
+            duration_minutes = int(float(duration) * 60)
+        except ValueError:
+            messagebox.showerror("Invalid Duration", "Please enter a valid numeric duration.")
+            return
         combined_end = combined_start + timedelta(minutes=duration_minutes)
     else:
         combined_end = combined_start
@@ -219,8 +223,9 @@ def fetch_calendar_tasks():
         service = get_calendar_service()
         events = list_all_events(service)
         for e in events:
-            if 'summary' not in e or 'start' not in e or 'dateTime' not in e['start']:
+            if not e.get('summary') or 'start' not in e or 'dateTime' not in e['start']:
                 continue
+
             start_str = e['start']['dateTime']
             start_dt = datetime.fromisoformat(start_str)
             duration = None

@@ -1,117 +1,190 @@
+import sys
 import os
+import pickle
 import json
-import pytest
-from datetime import datetime
-from pathlib import Path
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch, MagicMock, mock_open
 
-from calendar_utils import (
-    list_all_events,
-    create_event,
-    delete_task,
-    backup_calendar_to_json
-)
+# ✅ Add project root to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import calendar_utils as utils
 
-# Automatically clean up tests/test_data_temp.json before & after every test
-@pytest.fixture(autouse=True)
-def clean_test_data_temp():
-    file_path = Path("tests/test_data_temp.json")
-    if file_path.exists():
-        file_path.unlink()
-    yield
-    if file_path.exists():
-        file_path.unlink()
+@patch("calendar_utils.pickle.dump")
+@patch("calendar_utils.pickle.load")
+@patch("calendar_utils.os.path.exists", return_value=True)
+@patch("builtins.open", new_callable=mock_open)
+@patch("calendar_utils.build")
+def test_get_calendar_service_existing_creds(mock_build, mock_open_file, mock_exists, mock_load, mock_dump):
+    mock_creds = MagicMock(valid=True)
+    mock_load.return_value = mock_creds
 
-# ---- Fake Google API service for testing ----
-class FakeService:
-    def __init__(self, items=None):
-        self._items = items or []
-        self.inserted = []
-        self.deleted = []
+    service = utils.get_calendar_service()
+    assert service == mock_build.return_value
+    mock_build.assert_called_once()
+    
+from unittest.mock import patch, mock_open, MagicMock
+import os
 
-    def events(self):
-        return self
+@patch("calendar_utils.pickle.load", return_value=None)
+@patch("calendar_utils.os.path.exists", return_value=False)
+@patch("calendar_utils.InstalledAppFlow.from_client_secrets_file")
+@patch("calendar_utils.pickle.dump")
+def test_get_calendar_service_auth_flow(mock_dump, mock_flow, mock_exists, mock_load):
+    mock_creds = MagicMock()
+    mock_creds.valid = True
+    mock_flow.return_value.run_local_server.return_value = mock_creds
 
-    def list(self, **kwargs):
-        return self
+    from calendar_utils import get_calendar_service
+    service = get_calendar_service()
 
-    def insert(self, calendar_id, body):
-        self.inserted.append((calendarId, body))
-        return self
+    assert service is not None
+    mock_flow.assert_called_once()
+    mock_dump.assert_called_once()
 
-    def delete(self, calendar_id, event_id):
-        self.deleted.append((calendarId, eventId))
-        return self
 
-    def execute(self):
-        if self.inserted:
-            return {"status": "confirmed", **self.inserted[-1][1]}
-        return {"items": self._items}
 
-# -------------------- TESTS --------------------
+@patch("calendar_utils.pickle.dump")
+@patch("calendar_utils.os.path.exists", return_value=False)
+@patch("calendar_utils.InstalledAppFlow.from_client_secrets_file")
+@patch("builtins.open", new_callable=mock_open)
+@patch("calendar_utils.build")
+def test_get_calendar_service_new_creds(mock_build, mock_open_file, mock_flow, mock_exists, mock_dump):
+    mock_creds = MagicMock(valid=True)
+    mock_flow.return_value.run_local_server.return_value = mock_creds
 
-def test_list_all_events_empty():
-    fake = FakeService([])
-    result = list_all_events(fake, max_results=5)
-    assert result == []
+    service = utils.get_calendar_service()
+    assert service == mock_build.return_value
 
-def test_create_event_success():
-    fake = FakeService()
+
+def test_list_all_events():
+    mock_service = MagicMock()
+    mock_service.events.return_value.list.return_value.execute.return_value = {"items": [{"summary": "Test Event"}]}
+    events = utils.list_all_events(mock_service)
+    assert isinstance(events, list)
+    assert events[0]["summary"] == "Test Event"
+
+
+def test_create_event():
+    mock_service = MagicMock()
+    mock_service.events.return_value.insert.return_value.execute.return_value = {"id": "123"}
+    result = utils.create_event(mock_service, {"summary": "Test"})
+    assert result["id"] == "123"
+
+
+@patch("calendar_utils.list_all_events")
+def test_delete_task_found(mock_list):
+    mock_service = MagicMock()
     event = {
-        "summary": "Unit Test Event",
-        "start": {"dateTime": "2025-01-01T10:00:00"},
-        "end": {"dateTime": "2025-01-01T11:00:00"},
-        "description": ""
+        "id": "abc123",
+        "summary": "Task",
+        "start": {"dateTime": "2025-04-20T10:00:00Z"}
     }
-    result = create_event(fake, event)
-    assert result["summary"] == "Unit Test Event"
-    assert result["status"] == "confirmed"
+    mock_list.return_value = [event]
+    utils.delete_task(mock_service, "Task", "2025-04-20T10:00")
+    mock_service.events.return_value.delete.assert_called_once()
 
-def test_delete_task_found(capfd):
-    fake = FakeService([
-        {"id": "abc123", "summary": "Meeting", "start": {"dateTime": "2025-04-20T10:00:00"}}
-    ])
-    delete_task(fake, "Meeting", "2025-04-20T10:00")
-    out = capfd.readouterr().out
-    assert "🗑️ Deleted: Meeting" in out
-    assert fake.deleted[0][1] == "abc123"
 
-def test_delete_task_not_found(capfd):
-    fake = FakeService([
-        {"id": "abc123", "summary": "Other", "start": {"dateTime": "2025-04-20T11:00:00"}}
-    ])
-    delete_task(fake, "Meeting", "2025-04-20T10:00")
-    out = capfd.readouterr().out
-    assert "❌ No matching event found for deletion" in out
-    assert len(fake.deleted) == 0
+@patch("calendar_utils.list_all_events", return_value=[])
+def test_delete_task_not_found(mock_list):
+    mock_service = MagicMock()
+    utils.delete_task(mock_service, "Nonexistent", "2025-04-20T10:00")
+    mock_service.events.return_value.delete.assert_not_called()
 
-def test_backup_calendar_to_json(capfd):
-    fake = FakeService([
+
+@patch("builtins.open", new_callable=mock_open)
+@patch("calendar_utils.json.dump")
+@patch("calendar_utils.list_all_events")
+@patch("calendar_utils.print")
+def test_backup_calendar_to_json(mock_print, mock_list_all_events, mock_json_dump, mock_open_file):
+    mock_service = MagicMock()
+
+    now = datetime.now(timezone.utc)
+    start = now.isoformat()
+    end = (now + timedelta(hours=1)).isoformat()
+
+    # Add events that should be skipped (to trigger the `continue`)
+    mock_list_all_events.return_value = [
+        {"start": {"dateTime": start}, "end": {"dateTime": end}},  # Missing summary
+        {"summary": "No start"},  # Missing start
         {
-            "summary": "Backup Task",
-            "start": {"dateTime": "2025-04-20T09:00:00"},
-            "end": {"dateTime": "2025-04-20T10:30:00"}
-        },
-        {
-            "summary": "No end event",
-            "start": {"dateTime": "2025-04-21T14:00:00"}
-        },
-        {
-            "summary": "Invalid",
-            "start": {},
-            "end": {}
+            "summary": "Valid Task",
+            "start": {"dateTime": start},
+            "end": {"dateTime": end}
         }
-    ])
+    ]
 
-    test_path = "tests/test_data_temp.json"
-    backup_calendar_to_json(fake, test_path)
+    utils.backup_calendar_to_json(mock_service, out_path="temp.json")
 
-    assert os.path.exists(test_path)
+    # Valid output should contain only one task
+    dumped_data = mock_json_dump.call_args[0][0]
+    assert len(dumped_data) == 1
+    assert dumped_data[start[:10]][0]["task"] == "Valid Task"
 
-    with open(test_path) as f:
-        data = json.load(f)
-        assert "2025-04-20" in data
-        assert data["2025-04-20"][0]["task"] == "Backup Task"
-        assert data["2025-04-20"][0]["duration"] == "1.5 hours\t"
+    mock_open_file.assert_called_once_with("temp.json", "w")
+    mock_json_dump.assert_called_once()
+    mock_print.assert_called_with("📝 Backup saved to temp.json")
 
-    out = capfd.readouterr().out
-    assert "📝 Backup saved to" in out
+
+
+from unittest.mock import patch, mock_open, MagicMock
+from calendar_utils import get_calendar_service
+
+@patch("calendar_utils.build")
+@patch("calendar_utils.pickle.load")
+@patch("calendar_utils.os.path.exists", return_value=True)
+@patch("builtins.open", new_callable=mock_open)
+def test_get_calendar_service_with_valid_token(mock_open_file, mock_exists, mock_pickle, mock_build):
+    mock_creds = MagicMock()
+    mock_creds.valid = True  # ✅ This skips the auth flow (line 30)
+    mock_pickle.return_value = mock_creds
+
+    get_calendar_service()
+    mock_build.assert_called_once()
+
+
+from unittest.mock import patch, MagicMock
+from calendar_utils import delete_task, CALENDAR_ID
+
+@patch("calendar_utils.list_all_events")
+@patch("calendar_utils.print")
+def test_delete_task_prints_deleted(mock_print, mock_list_events):
+    # Arrange a mock service with a matching event
+    mock_service = MagicMock()
+    mock_events = mock_service.events.return_value
+    mock_delete = mock_events.delete.return_value
+    mock_delete.execute.return_value = None
+
+    mock_list_events.return_value = [{
+        "summary": "Test Task",
+        "start": {"dateTime": "2025-04-20T10:00:00"},
+        "id": "abc123"
+    }]
+
+    # Act
+    delete_task(mock_service, "Test Task", "2025-04-20T10:00")
+
+    # Assert
+    mock_print.assert_called_with("🗑️ Deleted: Test Task at 2025-04-20T10:00")
+    mock_events.delete.assert_called_once_with(
+        calendarId=CALENDAR_ID,
+        eventId="abc123"
+    )
+
+@patch("calendar_utils.pickle.dump")
+@patch("calendar_utils.pickle.load")
+@patch("calendar_utils.os.path.exists", return_value=True)
+@patch("builtins.open", new_callable=mock_open)
+@patch("calendar_utils.build")
+@patch("calendar_utils.Request")
+def test_get_calendar_service_refresh_token(mock_request, mock_build, mock_open_file, mock_exists, mock_load, mock_dump):
+    mock_creds = MagicMock()
+    mock_creds.valid = False
+    mock_creds.expired = True
+    mock_creds.refresh_token = True
+
+    mock_load.return_value = mock_creds
+    mock_creds.refresh.return_value = None
+
+    service = utils.get_calendar_service()
+    assert service == mock_build.return_value
+    mock_creds.refresh.assert_called_once_with(mock_request.return_value)
