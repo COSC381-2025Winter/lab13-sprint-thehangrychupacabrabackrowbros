@@ -10,7 +10,6 @@ tests/.pytest_cache/
 *.coverage
 coverage.xml
 htmlcov/
-tests/__pycache__/test_calendar_utils.cpython-313-pytest-8.3.5.pyc
 
 # === VSCode Settings ===
 .vscode/

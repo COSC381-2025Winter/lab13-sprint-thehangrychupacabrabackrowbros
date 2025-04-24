@@ -11,7 +11,7 @@ from calendar_utils import create_event, delete_task
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-app = ctk.CTk()
+
 app.title("Google Calendar Integrated Task Scheduler")
 app.minsize(600, 500)
 
@@ -163,7 +163,12 @@ def submit_task():
     if not task_name.strip():
         messagebox.showerror("Missing Task", "Task name cannot be empty.")
         return
-    formatted_duration = f"{duration} hour\t" if duration == "1" else f"{duration} hours\t" if duration else None
+    if duration == "1":
+        formatted_duration = f"{duration} hour\t"
+    elif duration:
+        formatted_duration = f"{duration} hours\t"
+    else:
+        formatted_duration = None
     all_tasks.append({
         "date": parsed_date,
         "time": parsed_time,
@@ -303,6 +308,7 @@ task_scroll.pack(fill='both', expand=True, padx=5, pady=(0,10))
 task_list_container = task_scroll
 
 if __name__ == "__main__":
+    app = ctk.CTk()
     load_tasks()
     sort_tasks()
     app.after(1, lambda: app.attributes('-topmost', True))

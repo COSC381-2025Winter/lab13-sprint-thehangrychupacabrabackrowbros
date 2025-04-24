@@ -1,0 +1,32 @@
+[project]
+name = "task_scheduler"
+version = "0.1.0"
+description = "A CustomTkinter-based task scheduler app integrated with Google Calendar"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Your Name", email = "your.email@example.com" }
+]
+
+# ✅ All dependencies together (runtime + dev)
+dependencies = [
+  "customtkinter==5.2.2",
+  "darkdetect==0.8.0",
+  "google-api-python-client==2.167.0",
+  "google-auth-httplib2==0.2.0",
+  "google-auth-oauthlib==1.2.1",
+  "httplib2==0.22.0",
+  "requests==2.32.3",
+  "pytest==8.3.5",
+  "pytest-cov==6.1.1",
+  "coverage==7.8.0",
+  "build==1.2.2.post1",
+  "twine==6.1.0"
+]
+
+[tool.setuptools]
+packages = [""]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
