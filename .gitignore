@@ -39,6 +39,7 @@ tests/test_data_temp.json
 # === Node/Python packaging artifacts (in case of extensions) ===
 dist/
 build/
+ovtests
 
 # === Ignore local script or dev-only files ===
 main.py
