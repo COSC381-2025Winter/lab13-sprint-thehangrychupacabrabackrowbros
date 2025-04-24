@@ -1,4 +1,4 @@
-name: Test Python App
+name: Test and Deploy Python App
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  test:
+  test-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -34,3 +34,13 @@ jobs:
         name: coverage-report
         path: coverage.xml
 
+    - name: Build distribution packages
+      run: |
+        python -m build
+
+    - name: Publish to TestPyPI
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+      run: |
+        python -m twine upload --repository testpypi dist/*
