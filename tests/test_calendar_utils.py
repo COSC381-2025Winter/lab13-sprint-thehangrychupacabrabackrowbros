@@ -34,11 +34,11 @@ class FakeService:
     def list(self, **kwargs):
         return self
 
-    def insert(self, calendarId, body):
+    def insert(self, calendar_id, body):
         self.inserted.append((calendarId, body))
         return self
 
-    def delete(self, calendarId, eventId):
+    def delete(self, calendar_id, event_id):
         self.deleted.append((calendarId, eventId))
         return self
 
