@@ -8,6 +8,7 @@ from unittest.mock import patch, MagicMock
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import task_scheduler_gui as gui
 
+# 🔁 Fixture: resets GUI + state between test runs
 @pytest.fixture(autouse=True)
 def clear_gui_state():
     gui.all_tasks.clear()
@@ -68,3 +69,7 @@ def test_clear_completed_tasks_no_service(mock_service):
     ))
     gui.clear_completed_tasks()
     assert len(gui.checkbox_refs) == 0
+
+    # Local list cleanup
+    assert not all_tasks
+    assert not checkbox_refs
