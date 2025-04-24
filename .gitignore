@@ -1,38 +1,45 @@
-# Python bytecode and cache
+# === Python Bytecode and Caches ===
 __pycache__/
 *.py[cod]
 *.pyo
-tests/__pycache__/*
-tests/pytest_cache/
 
-# macOS system files
-.DS_Store
+# === Test & Pytest Caches ===
+.pytest_cache/
+tests/__pycache__/
+tests/.pytest_cache/
+*.coverage
+coverage.xml
+htmlcov/
+tests/__pycache__/test_calendar_utils.cpython-313-pytest-8.3.5.pyc
 
-# VSCode settings
+# === VSCode Settings ===
 .vscode/
 
-# Virtual environments and packaging
+# === macOS Files ===
+.DS_Store
+
+# === Virtual Environments ===
 .venv/
-env/
 venv/
+env/
 *.egg-info/
 pip-wheel-metadata/
 
-# Coverage & test outputs
-.coverage
-htmlcov/
-coverage.xml
-.pytest_cache/
-.cache/
-
-# Local runtime and test data
+# === Local Runtime & Test Files ===
+token.pickle
 tests/test_data_temp.json
-main.py
 
-# OS backup files
+# === Backup or Temp Files ===
 *.swp
 *.bak
 *.tmp
 
-# Jupyter checkpoints (just in case)
+# === Jupyter Notebooks Checkpoints (if ever added) ===
 .ipynb_checkpoints/
+
+# === Node/Python packaging artifacts (in case of extensions) ===
+dist/
+build/
+
+# === Ignore local script or dev-only files ===
+main.py
