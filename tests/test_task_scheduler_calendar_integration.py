@@ -60,16 +60,22 @@ from datetime import datetime
 
 @patch("task_scheduler_gui.get_calendar_service", side_effect=Exception("Fail"))
 def test_clear_completed_tasks_no_service(mock_service):
-    import task_scheduler_gui as gui
+    # Set up a mocked checkbox that is "checked"
+    checkbox_mock = MagicMock()
+    checkbox_mock.get.return_value = 1
+
+    frame_mock = MagicMock()
     gui.checkbox_refs.clear()
     gui.checkbox_refs.append((
         {"task_name": "Fake", "start_datetime": datetime.now()},
-        MagicMock(return_value=1),
-        MagicMock()
+        checkbox_mock,
+        frame_mock
     ))
+
     gui.clear_completed_tasks()
+
+    # checkbox_refs should be cleared (because task was "checked")
     assert len(gui.checkbox_refs) == 0
 
-    # Local list cleanup
-    assert not all_tasks
-    assert not checkbox_refs
+    # all_tasks should also be cleared
+    assert len(gui.all_tasks) == 0
